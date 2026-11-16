@@ -52,12 +52,6 @@
       <button class="brand" id="brand" aria-label="ORION, replay the intro"></button>
     </div>
 
-    <button class="now-pill glass-pill" id="now-pill" aria-label="What ORION is doing, open activity">
-      <span class="state-dot" id="now-dot"></span>
-      <span class="now-label" id="now-label">Standing by</span>
-      <span class="now-detail" id="now-detail"></span>
-    </button>
-
     <div class="tb-right">
       <button class="pill-btn glass-pill" id="btn-new-task">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>New task</span>
@@ -117,12 +111,6 @@
 
   <div class="crumb" id="crumb"><span id="crumb-text">ORION overview</span></div>
 
-  <!-- Activity timeline, left edge -->
-  <aside class="timeline" id="timeline" aria-label="Activity, last 12 hours">
-    <canvas id="tl-wave" aria-hidden="true"></canvas>
-    <ol class="tl-hours" id="tl-hours"></ol>
-  </aside>
-
   <!-- Detail panel, right -->
   <aside class="detail" id="detail" aria-label="Details" aria-live="polite">
     <div class="grab-zone" id="detail-grab"><span class="grabber"></span></div>
@@ -161,7 +149,7 @@
       <form class="ask" id="compose-form" autocomplete="off">
         <label class="ask-field">
           <span class="sr-only">Message ORION</span>
-          <textarea id="input" rows="2" placeholder="Ask ORION anything, @ to mention a tool, / for actions" enterkeyhint="send"></textarea>
+          <textarea id="input" rows="2" placeholder="Ask ORION" enterkeyhint="send"></textarea>
         </label>
       </form>
 
@@ -176,13 +164,6 @@
       <div class="dock-row">
         <button type="button" class="round-btn" id="btn-plus" aria-label="New task">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-        </button>
-        <button type="button" class="chip" id="chip-agent" aria-label="ORION status, open details">
-          <span class="state-dot" id="state-dot"></span><span id="chip-agent-label">Agent</span>
-          <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg>
-        </button>
-        <button type="button" class="chip" id="chip-queue" aria-label="Queued tasks">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 2"/></svg><span id="chip-queue-n">0</span>
         </button>
         <span class="spacer"></span>
         <button type="button" class="round-btn voice-btn" id="btn-voice" aria-label="Start hands-free voice">

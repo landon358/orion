@@ -1,5 +1,21 @@
 # Connecting ORION to the ORION UI
 
+## Start here: the brief from Landon
+
+> I have a finished web UI for ORION at https://landon358.github.io/orion/ (code: https://github.com/landon358/orion). Your job is ORION's side: one WebSocket server on this machine that speaks the protocol in this file. Read all of it first; it has every message, the security rules and a checklist for when it's done. `tools/orion-server-example.mjs` in the repo is a working, dependency-free reference server to copy from.
+>
+> Key points:
+> - It must be reachable as `wss://`. Use `tailscale serve --bg 8765` with MagicDNS and HTTPS certificates turned on, so the UI connects to `wss://<this-machine>.<tailnet>.ts.net`.
+> - Only accept connections from `https://landon358.github.io` (and `http://localhost:8840` for testing).
+> - Generate a long random token. The UI's first message is `hello` with that token. If the token is wrong, or no `hello` arrives within 5 seconds, close with code 4401.
+> - After a good `hello`, send a `snapshot`. Then send `state`, `message` (stream the full text so far under one id), `tool` (call → result → done), `activity`, `task`, `approval`, `vitals` about once a second, and `metrics` for the Ciel page.
+> - Handle these from the UI: `send`, `approve`, `reject`, `listening`, `interrupt`.
+> - Voice, phase 1: the browser does speech-to-text and speaks replies. Leave `speaks: false` for now.
+>
+> When it passes the checklist in section 7, give me the link `https://landon358.github.io/orion/?server=wss://<host>&token=<TOKEN>` so I can open it once on each device.
+
+---
+
 This is the brief for whoever builds ORION's server (the agent on the RTX 2070 machine). The web UI is finished and already speaks this protocol. Your job is to expose **one WebSocket endpoint** that sends the events below and accepts the commands below. Nothing in the UI needs to change.
 
 - **UI, live:** https://landon358.github.io/orion/

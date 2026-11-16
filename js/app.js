@@ -118,7 +118,7 @@ function layout() {
     // the map keeps its framing on every page so nothing jumps when the column forms
     const sum = $('#summary').offsetWidth;
     const right = ui.detailOpen ? 400 : sum ? sum + 56 + 28 : 24;
-    graph.setInsets({ top: topH + 6, bottom: ui.route === 'home' ? dockH + 30 + 52 : 150, left: ui.route === 'home' && shown($('#timeline')) ? 200 : 96, right });
+    graph.setInsets({ top: topH + 6, bottom: ui.route === 'home' ? dockH + 30 + 52 : 150, left: 96, right });
     graph.setLine(ui.route === 'chat', lineBox());
     // the rings: centred in the open space on the ORION page; a small column on the left while chatting
     const box = ui.route === 'chat'
@@ -137,7 +137,7 @@ function lineBox() {
   return { x: 156, top: $('#topbar').offsetHeight + 36, bottom: innerHeight - 56 };
 }
 new ResizeObserver(layout).observe($('#dock'));
-addEventListener('resize', () => { layout(); drawTimeline(); });
+addEventListener('resize', layout);
 wideMQ.addEventListener('change', () => { setDetail(ui.detailOpen && isWide()); applyRoute(); graph.paused = true; });
 
 /* ================================================================ */
@@ -154,7 +154,7 @@ client.on('connection', ({ status, mode }) => {
     orbit.setTools(s.tools);
     s.tools.forEach(seedHourly);
     welcome();
-    renderStats(); renderChips(); drawTimeline(); renderDetail();
+    renderStats(); renderDetail();
     renderSummary();
     setDetail(false);
     if (ui.route === 'business') biz.render();
@@ -170,7 +170,6 @@ client.on('state', ({ state, label, detail }) => {
   $('#composer').classList.toggle('busy', ['thinking', 'working', 'speaking'].includes(state));
   if (ACTIVE.has(state)) ui.lastJob = Date.now();
   voice.onLeoState(state);
-  renderChips();
   if (ui.turn && state === 'thinking' && !ui.turn.steps.length) setWorking(label);
   if (ui.view === 'flow') renderFlowState();
   if (ui.selected === 'leo') scheduleDetail();
@@ -209,12 +208,11 @@ client.on('activity', (a) => {
   if (ui.turn && ['tool', 'search', 'think'].includes(a.kind)) { ui.turn.steps.push(a.title); setWorking(`${a.title}…`); }
   if (ui.drawerOpen && ui.panel === 'activity') renderActivity();
   if (ui.selected === 'leo' || a.tool === ui.selected) scheduleDetail();
-  drawTimeline();
 });
 
 client.on('task', () => {
   if (ui.drawerOpen && ui.panel === 'tasks') renderTasks();
-  renderChips(); renderStats();
+  renderStats();
   if (ui.view === 'flow') scheduleFlow();
   if (ui.selected === 'leo') scheduleDetail();
 });
@@ -606,28 +604,13 @@ function renderStats() {
   setStat('waiting', String(n), n === 1 ? 'approval' : 'approvals');
 }
 
-function renderChips() {
-  const s = client.snapshot();
-  const dot = $('#state-dot');
-  dot.className = `state-dot ${ui.state === 'needs-you' ? 'alert' : ACTIVE.has(ui.state) ? 'active' : ''}`;
-  $('#chip-agent-label').textContent = isWide() ? 'Agent' : ui.stateLabel;
-  $('#now-dot').className = dot.className;
-  $('#now-label').textContent = ui.stateLabel;
-  $('#now-detail').textContent = ui.stateDetail;
-  const q = s.tasks.filter((t) => t.status === 'queued' || t.status === 'running').length;
-  $('#chip-queue-n').textContent = q ? `+${q}` : '0';
-  $('#chip-queue').setAttribute('aria-label', `${q} tasks queued or running`);
-}
-$('#chip-agent').addEventListener('click', () => select('leo'));
-$('#chip-queue').addEventListener('click', () => openDrawer('tasks'));
-$('#now-pill').addEventListener('click', () => openDrawer('activity'));
 $$('[data-open]').forEach((b) => b.addEventListener('click', () => openDrawer(b.dataset.open)));
 $('#brand').innerHTML = orionLogo({ strands: 3, spread: 1.6 });
 $('#brand').addEventListener('click', () => playIntro({ brand: $('#brand'), force: true }));
 playIntro({ brand: $('#brand'), force: new URLSearchParams(location.search).has('intro') });
 
 const input = $('#input');
-const setPlaceholder = () => { input.placeholder = isWide() ? 'Ask ORION anything, @ to mention a tool, / for actions' : 'Ask ORION'; };
+const setPlaceholder = () => { input.placeholder = 'Ask ORION'; };
 setPlaceholder();
 wideMQ.addEventListener('change', setPlaceholder);
 const form = $('#compose-form');
@@ -774,48 +757,6 @@ function onDecisionClick(e) {
 }
 $('#pop-body').addEventListener('click', onDecisionClick);
 
-/* ================================================================ */
-/* timeline                                                         */
-/* ================================================================ */
-
-const TL_HOURS = 12;
-function drawTimeline() {
-  const wrap = $('#timeline');
-  if (!shown(wrap)) return;
-  const cv = $('#tl-wave');
-  const H = cv.clientHeight, W = cv.clientWidth;
-  const dpr = Math.min(devicePixelRatio || 1, 2);
-  cv.width = W * dpr; cv.height = H * dpr;
-  const ctx = cv.getContext('2d');
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, W, H);
-  const now = Date.now(), span = TL_HOURS * 3600e3;
-  const rows = Math.floor(H / 2.5);
-  const counts = new Array(rows).fill(0);
-  client.snapshot().activity.forEach((a) => {
-    const k = Math.floor(((a.at - (now - span)) / span) * rows);
-    if (k >= 0 && k < rows) counts[k] += 1;
-  });
-  let seed = 7;
-  const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
-  for (let i = 0; i < rows; i++) {
-    const base = 0.18 + 0.5 * rnd() * rnd() + 0.3 * Math.abs(Math.sin(i * 0.21));
-    const len = Math.min(W, (base + counts[i] * 0.6) * W * 0.8);
-    const y = i * 2.5 + 1;
-    const recent = i > rows - 6;
-    ctx.fillStyle = counts[i] ? 'rgba(236,220,180,0.75)' : recent ? 'rgba(230,220,200,0.5)' : 'rgba(230,220,200,0.22)';
-    ctx.fillRect(0, y, len, 1);
-  }
-  const labels = [];
-  for (let h = TL_HOURS - 2; h >= 0; h -= 2) {
-    const t = new Date(now - h * 3600e3);
-    const label = h === 0 ? 'Now' : t.toLocaleTimeString([], { hour: 'numeric' });
-    const y = (1 - h / TL_HOURS) * H;
-    labels.push(`<li class="${h === 0 ? 'now' : ''}" style="top:${Math.min(H - 14, y).toFixed(0)}px"><button data-h="${h}">${label}</button></li>`);
-  }
-  $('#tl-hours').innerHTML = labels.join('');
-}
-$('#tl-hours').addEventListener('click', (e) => { if (e.target.closest('[data-h]')) openDrawer('activity'); });
 
 /* ================================================================ */
 /* view switch + flow view                                          */
@@ -874,7 +815,7 @@ function renderFlow() {
   const wide = isWide();
   const top = wide ? $('#topbar').offsetHeight + 10 : 10;
   const bottom = wide ? $('#dock').offsetHeight + 30 + 52 : 20;
-  const left = wide ? (shown($('#timeline')) ? 210 : 100) : 10;
+  const left = wide ? 100 : 10;
   const right = wide ? (ui.detailOpen ? 400 : 30) : 10;
   const cy = top + (H - top - bottom) / 2;
   ui.flowCy = cy;
@@ -1486,13 +1427,11 @@ $('#summary').addEventListener('click', (e) => {
 
 selectPanel('activity');
 autosize();
-renderChips();
 applyRoute();
 client.connect();
 setInterval(() => {
   if (ui.drawerOpen && ui.panel === 'activity') renderActivity();
   if (ui.popOpen && !ui.decisions.size) renderApprovals();
-  drawTimeline();
 }, 30000);
 setInterval(() => { for (const h of ui.hourly.values()) { h.shift(); h.push(0); } }, 3600e3);
 

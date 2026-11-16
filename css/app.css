@@ -190,7 +190,7 @@ body.business .stage { opacity: 0; pointer-events: none; }
 .topbar {
   position: fixed; top: 0; left: 0; right: 0; z-index: 20;
   height: var(--top-h); padding: var(--sat) 16px 0;
-  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px;
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px;
   pointer-events: none;
 }
 .topbar > * { pointer-events: auto; }
@@ -253,18 +253,6 @@ body.business .stage { opacity: 0; pointer-events: none; }
 @media (max-width: 599px) { .intro-words { font-size: 64px; font-weight: 300; } }
 .welcome-text b { font-weight: 500; font-size: 0.9375rem; letter-spacing: -0.005em; white-space: nowrap; }
 .welcome-text span { font-size: 0.75rem; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-.now-pill {
-  height: 44px; max-width: min(460px, 38vw); padding: 0 18px 0 16px;
-  display: inline-flex; align-items: center; gap: 10px;
-  font-size: 0.875rem; white-space: nowrap;
-  transition: background 0.15s, transform 0.1s;
-}
-.now-pill:hover { background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05)); }
-.now-pill:active { transform: scale(0.98); }
-.now-label { font-weight: 500; }
-.now-detail { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.now-detail:empty { display: none; }
 
 .tb-right { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 .pill-btn {
@@ -338,27 +326,6 @@ body.business .stage { opacity: 0; pointer-events: none; }
 .rail-sep { width: 20px; height: 1px; margin: 4px 0; background: var(--edge-2); flex: none; }
 .rail-map { display: flex; flex-direction: column; align-items: center; gap: 4px; overflow: hidden; max-height: 260px; transition: max-height 0.45s var(--spring), opacity 0.25s; }
 body:not(.home) .rail-map { max-height: 0; opacity: 0; pointer-events: none; }
-
-/* ---------- timeline (left, beside the rail) ---------- */
-
-.timeline {
-  position: fixed; z-index: 10; left: 88px; top: calc(var(--top-h) + 40px); bottom: 300px;
-  width: 104px; max-height: 440px;
-  transition: opacity 0.3s;
-}
-body:not(.home) .timeline { opacity: 0; pointer-events: none; }
-.timeline canvas { position: absolute; left: 0; top: 0; width: 28px; height: 100%; }
-.tl-hours { list-style: none; margin: 0; padding: 0; position: absolute; inset: 0; }
-.tl-hours li { position: absolute; left: 34px; transform: translateY(-50%); }
-.tl-hours button { font: 400 0.75rem/1 var(--mono); color: var(--text-3); padding: 4px 6px; border-radius: 6px; transition: color 0.15s; }
-.tl-hours button:hover { color: var(--text); }
-.tl-hours li.now button {
-  font-size: 0.9375rem; color: var(--text); padding: 6px 12px;
-  border: 1px solid var(--glass-edge); border-radius: 999px; background: var(--glass-bg);
-  -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
-  box-shadow: var(--hi), 0 0 18px rgba(214, 180, 106, 0.14);
-}
-.tl-hours li.now::before { content: ""; position: absolute; right: 100%; top: 50%; width: 30px; height: 1px; background: linear-gradient(90deg, transparent, var(--edge-2)); }
 
 /* ---------- detail panel (right) ---------- */
 
@@ -984,15 +951,10 @@ body.business .biz { opacity: 1; visibility: visible; transform: none; transitio
   .detail-open { --rw: 388px; }
 }
 @media (min-width: 900px) and (max-width: 1180px) {
-  .detail-open .timeline { display: none; }
   .detail-open { --dock-w: min(580px, calc(100vw - var(--rw) - 110px)); }
   body:not(.detail-open) { --dock-w: min(580px, calc(100vw - 420px)); }
-  .now-pill { max-width: 30vw; }
   .pill-btn span { display: none; }
   .pill-btn { width: 44px; padding: 0; justify-content: center; }
-}
-@media (min-width: 900px) and (max-height: 760px) {
-  .timeline { display: none; }
 }
 
 /* =========================================================== */
@@ -1003,7 +965,7 @@ body.business .biz { opacity: 1; visibility: visible; transform: none; transitio
   :root { --top-h: calc(64px + var(--sat)); }
   .topbar { grid-template-columns: 1fr auto; padding: var(--sat) 12px 0; background: linear-gradient(180deg, rgba(8, 8, 8, 0.85), transparent); }
   #btn-menu { display: grid; }
-  .now-pill, .pill-btn, .crumb, .timeline, .rail { display: none; }
+  .pill-btn, .crumb, .rail { display: none; }
   .welcome { height: 44px; padding-right: 14px; }
   .welcome .welcome-text { display: none; }
   .welcome { padding-right: 10px; }
