@@ -1,0 +1,74 @@
+# CLAUDE.md: read this before changing anything in this repo
+
+This repo is **only the ORION UI** (static site, GitHub Pages at https://landon358.github.io/orion/).
+The backend already exists, is live, and speaks `ORION-PROTOCOL.md` exactly. Your job when editing
+here is to improve the UI **without changing the wire contract**. If a UI change needs the backend
+to change, see "Changing the protocol" below. Do not guess what the backend does; it is written down here.
+
+## Where the backend is
+
+- Orion runs on Landon's Windows PC in `C:\Users\lando\orion` (Python 3.12, FastAPI, Ollama with a local
+  qwen3.5 9B, plus Claude Haiku/Sonnet). It is not in this repo and not on GitHub.
+- The protocol implementation is `orion/bridge.py` there (one file, about 400 lines, with a table of how
+  each Orion event becomes a UI frame). `orion_server.py` serves it:
+  - `ws://localhost:8765/` (root) and `ws://localhost:8765/ws`: the UI port, in the same process as the
+    HTTP API, so there is exactly one Orion state. `tailscale serve --bg 8765` exposes it as
+    `wss://<pc>.<tailnet>.ts.net` for phones.
+  - `ws://localhost:8766/ws`: the same bridge on the HTTP API port (handy for local tests).
+- Its own test of this contract: `tests/test_ui_bridge.py` on the PC (origin check, 4401, snapshot,
+  echo, streaming under one id, tool call/result/done, interrupt, listening, approvals, two devices, guest).
+
+## The contract (protocol 1), as the backend implements it
+
+Everything in `ORION-PROTOCOL.md` is implemented. Details that matter when you edit `js/leo-client.js`
+or anything that reads these frames:
+
+| Backend behaviour | Do not change on the UI side |
+|---|---|
+| First frame must be `hello` `{token, client, protocol}` within 5 s, else close **4401**. Bad token: 4401. Bad `Origin`: HTTP 403 before the upgrade. | Send `hello` first; stop retrying on 4401; keep the `?server=&token=` bootstrap and the `orion-server` localStorage key. |
+| Allowed origins are a backend setting (`config.json` -> `server.ui_origins`): `https://landon358.github.io` and `http://localhost:8840`. | If the site moves (Netlify, custom domain), the new origin has to be added on the PC; nothing in the UI can fix a 403. |
+| `snapshot` after hello: `{protocol: 1, speaks: false, state, tools, tasks, approvals, activity, vitals}`. `metrics` is **omitted** (no Shopify or Meta data yet). | Keep the "sample data" note logic for a missing `metrics`; never expect `metrics` to be present. |
+| `tools` are 10 bands, innermost first: `memory, planner, web, files, voice, email, meta, clarity, github, printer` (+`calls`, `lastUsed`). The first five plus `meta` have icons in the UI; the others get the generic icon. | Adding icons for `email`, `clarity`, `github`, `printer` is a UI-only change and safe. Do not hard-code the list of 8 from the mock. |
+| Reply streaming: `message` `{id, role: "leo", text: <full text so far>, streaming: true}` repeatedly, then one frame with `streaming: false` (and `interrupted: true` after an `interrupt`, text ending in " —"). | Full-text-so-far semantics, one id per reply, `role: "leo"` (the role name stays "leo" for compatibility; renaming it needs a backend change). |
+| The user's `send` is echoed back as `message` `{id: <same id>, role: "user", text, voice}` to every device. | Keep ignoring your own echoed id. |
+| `state` sequence per turn: `thinking` (detail names the brain: "local brain", "Claude Haiku", "Claude Sonnet") -> `working` while tools run (label is the tool, detail its argument) -> `speaking` ("Replying" or "Speaking" for voice) -> `idle`, or `needs-you` when an approval is pending. The trailing `state` arrives **after** the final `message` frame. | Nothing in the UI should assume `idle` before the final message. |
+| `tool` frames: `call` -> `result` -> `done`, always ending in `done`; `tool` is a band id above. `activity` kinds used: `tool`, `search` (web search, page read, Wikipedia), `think` (heartbeat), `done` (notifications, routine results, brief), `approval`, `rejected` (blocked actions, errors, rejected approvals). | |
+| Approvals come from Orion's safety layer: `approval` `{id, title, source, summary, preview, status: "pending"}` + `task` with the same id and `status: "needs-you"` + `notify`. `approve`/`reject` resolve it and Orion replies with a new streamed `message`. | Keep sending `approve`/`reject` with the approval `id`. There is no "remember this decision" over the WebSocket yet (the HTTP API has it). |
+| `vitals` every second to connected clients: `{gpu, vram, vramTotal, temp, tps, ctx, uptime, queue, model}`; `ctx` is an estimate, `tps` is measured on the last reply, `model` is like `"qwen3.5-9b · Q4_K_M"`. | |
+| Background work arrives as `activity` + `notify` + `task` (routines, timers, the heartbeat, the morning brief, the memory inbox). Tasks for routines have ids `routine_<name>`, timers `timer_<label>`. | |
+| `listening {on}` only toggles `idle` <-> `listening`. `interrupt {}` stops the current reply. Unknown frame types are ignored in both directions. | |
+| `speaks` is `false` (voice phase 1: the browser speaks). Orion has its own Kokoro voice (English and French) but phase 2 (server audio over the socket) is not designed yet. | Do not build phase 2 UI assumptions without agreeing the audio transport with the backend first. |
+| Guests: a guest token (made on the PC with `orion_connect.py guest add "Name"`) gets the same protocol with an empty room and Orion's guest limits underneath. Rooms are per person; devices of the same person share one room. | No UI change needed for guests. |
+
+## Safe to change freely
+
+Anything visual or interactive that stays inside the frames above: pages, layout, colours, the orbit,
+animations, icons, copy, the business page layout, the intro, PWA bits. Remember to bump `VERSION` in
+`sw.js` so installed copies update.
+
+## Changing the protocol
+
+1. Unknown types are ignored on both sides, so a **new** event or command never breaks anything, but the
+   backend will not send or act on it until it is implemented there.
+2. Write the proposed addition into `ORION-PROTOCOL.md` under a heading "Proposed (not yet in the backend)"
+   with the exact frame shape, and tell Landon. He applies it on the PC side (in `orion/bridge.py`) with
+   his coding assistant, then moves it out of "Proposed".
+3. Never rename or remove an existing type or field, change the `hello`/4401 handshake, or change the
+   meaning of `streaming`, `interrupted`, `id` echoing, or the tool ids, without a matching backend change
+   shipped first. Bump `protocol` only together with the backend.
+
+## Testing a UI change against the real backend (on Landon's PC)
+
+```
+cd <this repo>            # on the PC
+python -m http.server 8840
+```
+Then open `http://localhost:8840/?server=ws://localhost:8765&token=<TOKEN>` where TOKEN comes from
+`C:\Users\lando\orion\.venv\Scripts\python.exe C:\Users\lando\orion\orion_connect.py token`
+(`orion_connect.py ui-link` prints both the local and the Tailscale link). Orion's services must be
+running (`powershell -File start-orion.ps1` in the orion folder). Node is not installed on the PC, so use
+Python's http.server rather than `npx serve`; the Node reference server `tools/orion-server-example.mjs`
+is only a stand-in and is no longer needed.
+
+From any other machine, the reference server is still the quickest way to see the frames; it matches the
+backend except for the 10-band tool list and the real Orion replies.
