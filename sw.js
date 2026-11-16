@@ -1,6 +1,6 @@
 // App-shell cache so ORION opens instantly (and shows "Offline" instead of a blank page).
 // Bump VERSION whenever you deploy changed files.
-const VERSION = 'orion-v17';
+const VERSION = 'orion-v18';
 const SHELL = ['./', 'index.html', 'css/app.css', 'js/app.js', 'js/graph.js', 'js/business.js', 'js/logo.js', 'js/intro.js', 'js/orbit.js', 'js/lab.js', 'js/leo-client.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
