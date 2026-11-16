@@ -29,17 +29,19 @@ In `createLeoClient()` in `js/leo-client.js`: when nothing is stored in localSto
 was given, use `DEFAULT_SERVER` with an empty token. Keep the `?server=&token=` override and `?demo`
 exactly as they are.
 
-### 1b. A lock screen instead of a token in the link
+### 1b. A login screen (name + password) instead of a token in the link
 
-When the client has a server but no token (or the server closed with **4401**), show a full-screen
-lock view: the ORION wordmark, one password field, a Connect button, and an error line. On submit,
-store `{url, token: <password>}` under the existing `orion-server` localStorage key and connect. The
-backend accepts the password in the same `hello.token` field, so **no protocol change**.
+When the client has a server but no stored login (or the server closed with **4401**), show a
+full-screen login view after the opening animation: the ORION wordmark, a name field, a password
+field, a Connect button, and an error line. On submit, send
+`hello {name, password, client, protocol}` and, once the `snapshot` arrives, store `{url, name, password}`
+under the existing `orion-server` localStorage key so the next visit logs in silently. The full
+account model (what each account gets, watch list, brief, the owner's admin view) is in **ACCOUNTS.md**.
 
-- 4401 means wrong password, or too many attempts (the address is locked for 10 minutes after 5
-  failures). Show "Wrong password" and clear the stored token so the lock screen returns.
-- A `?token=` in the link still works and skips the lock screen (that is how guest links work).
-- Do not keep the password anywhere except that localStorage entry; never put it in the URL.
+- 4401 means wrong name or password, or too many attempts (the address is locked for 10 minutes after
+  5 failures). Show "Wrong name or password", clear the stored login, return to the login screen.
+- A `?token=` in the link still works and skips the login screen.
+- Never put the password in the URL.
 
 ### 1c. Keep what CLAUDE.md lists
 
@@ -63,7 +65,8 @@ Frame types, field names, 4401 handling, reconnect backoff, per-device message d
 In PowerShell, in `C:\Users\lando\orion`:
 
 ```
-.venv\Scripts\python.exe orion_connect.py password            # choose the UI password (12+ chars)
+.venv\Scripts\python.exe orion_connect.py password            # the owner's login password (12+ chars)
+.venv\Scripts\python.exe orion_connect.py name owner "Landon"  # the owner's login name (default "Owner")
 .venv\Scripts\python.exe orion_connect.py ui-url https://orion-ui.netlify.app
 powershell -File stop-orion.ps1
 powershell -File start-orion.ps1
@@ -81,12 +84,13 @@ HTTPS certificates must be enabled in the Tailscale admin console, and Funnel ap
    minutes. That is the brute-force guard working.
 4. On the PC, `data\audit.jsonl` and the UI's activity feed show what Orion did.
 
-## 5. Guests
+## 5. Friends' accounts
 
-`orion_connect.py guest add "Name"` prints a token. Their link is
-`https://orion-ui.netlify.app/?token=<their token>`, which skips the lock screen. They get chat,
-research, timers and a 5-cent cloud allowance, and cannot touch the PC, connectors or your data.
-`orion_connect.py guest remove <id>` revokes it.
+`orion_connect.py guest add "Alex" --password` creates an account with a login name and password (or
+use the master UI's "add account"). They open the same address and log in. They get chat, research,
+timers, their own memory, watch list and brief, and a 10-cent cloud allowance; they cannot touch the
+PC, connectors, settings, Orion's own files or your data. `orion_connect.py guest remove <id>`
+revokes it. Details in ACCOUNTS.md.
 
 ## 6. What protects Orion, in one place
 
