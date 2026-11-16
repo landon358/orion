@@ -6,6 +6,7 @@
  *
  *   ORION_TOKEN=dev-token node tools/orion-server-example.mjs
  *   then open  http://localhost:8840/?server=ws://localhost:8765&token=dev-token
+ *   (or log in with any name and dev-token as the password)
  *
  * Env: PORT (8765), ORION_TOKEN (dev-token),
  *      ORION_ORIGINS (comma list; default the GitHub Pages site + localhost:8840)
@@ -113,6 +114,7 @@ function welcome(c) {
   c.send('snapshot', {
     protocol: 1,
     speaks: false,                       // true once ORION streams Kokoro audio itself
+    account: { id: 'owner', name: c.name, role: 'owner', address: 'sir', features: { actions: true, connectors: true, admin: true, watch: true, brief: true, memory: true } },
     state,
     tools,
     tasks: [...tasks.values()],
@@ -154,7 +156,11 @@ server.on('upgrade', (req, socket) => {
       let msg;
       try { msg = JSON.parse(f.payload.toString('utf8')); } catch { continue; }
       if (!c.authed) {
-        const ok = msg.type === 'hello' && typeof msg.data?.token === 'string' && safeEqual(msg.data.token, TOKEN);
+        // a token, or a name + password (here: any name, with ORION_TOKEN as the password)
+        const d = msg.data ?? {};
+        const secret = typeof d.password === 'string' && d.name ? d.password : d.token;
+        const ok = msg.type === 'hello' && typeof secret === 'string' && safeEqual(secret, TOKEN);
+        c.name = d.name || 'Owner';
         if (!ok) { c.close(4401, 'bad token'); return; }
         c.authed = true; clearTimeout(helloTimer); clients.add(c); welcome(c);
         continue;

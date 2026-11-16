@@ -6,6 +6,10 @@
  * again as they land, while the app appears underneath.
  * Click or press any key to skip. Once per browser session; tapping the
  * logo in the top bar (or ?intro in the URL) replays it.
+ *
+ * With `gate` (the login), the name holds open and a panel rises beneath it;
+ * on phones the stacked name condenses towards the top to make room. The
+ * capitals only fly to the top bar once `gate(panel)` resolves.
  */
 import { orionLetters } from './logo.js';
 
@@ -20,9 +24,9 @@ const BRAND = { strands: 3, spread: 1.6 };      // must match the top-bar logo s
 const VB = { x: 0, y: 10, w: 524 };             // the top-bar logo's viewBox
 let running = false;
 
-export async function playIntro({ brand, force = false } = {}) {
+export async function playIntro({ brand, force = false, gate = null } = {}) {
   if (running) return;
-  try { if (!force && sessionStorage.getItem('orion-intro')) return; sessionStorage.setItem('orion-intro', '1'); } catch { /* storage off: just play */ }
+  try { if (!force && !gate && sessionStorage.getItem('orion-intro')) return; sessionStorage.setItem('orion-intro', '1'); } catch { /* storage off: just play */ }
   running = true;
   document.body.classList.add('intro-run');
 
@@ -146,7 +150,7 @@ export async function playIntro({ brand, force = false } = {}) {
         { opacity: 0, filter: 'blur(8px)', transform: 'translateX(-0.25em)' },
         { opacity: 1, filter: 'blur(0px)', transform: 'none' },
       ], { duration: 900, delay: 780 + i * 90, easing: SOFT }));
-      await wait(1800 + 1700);
+      await wait(1800 + (gate ? 500 : 1700));
     }
 
     // 2. the name unfolds; each thread letter becomes a solid letter
@@ -162,8 +166,50 @@ export async function playIntro({ brand, force = false } = {}) {
         { opacity: 0, filter: 'blur(10px)', transform: 'translateX(-0.25em)' },
         { opacity: 1, filter: 'blur(0px)', transform: 'none' },
       ], { duration: 1000, delay: 420 + i * 70, easing: SOFT }));
-      await wait(Dur + 1600);
+      await wait(Dur + (gate ? 400 : 1600));
     }
+  }
+
+  // 2b. the login: the name holds open, the panel rises beneath it
+  let cond = 1;
+  if (gate) {
+    all.forEach((a) => a.finish());
+    // wherever a skip left things, settle on the open name
+    threads.forEach((t) => { t.style.opacity = '0'; });
+    chars.forEach((c) => { c.style.opacity = '1'; c.style.filter = 'none'; });
+    texts.forEach((t) => { t.style.opacity = '1'; t.style.filter = 'none'; t.style.transform = 'none'; });
+    rests.forEach((r, i) => { r.style.width = `${widths[i]}px`; });
+    if (stack) caps.forEach((c) => { c.style.transform = 'none'; });
+    else { caps.forEach((c, i) => { c.style.width = `${cw1[i]}px`; c.style.marginRight = '0px'; }); words.style.transform = `scale(${sE})`; }
+    glow.style.opacity = '1';
+    el.removeEventListener('pointerdown', skip);
+    removeEventListener('keydown', skip);
+    skipped = false;
+    el.classList.add('gated');
+    el.removeAttribute('aria-hidden');
+    words.setAttribute('aria-hidden', 'true');
+
+    const panel = document.createElement('div');
+    panel.className = 'gate-wrap';
+    el.append(panel);
+    const done = gate(panel);                    // fills the panel straight away, resolves once logged in
+
+    // make room: phones shrink the column towards the top, wide screens lift the line
+    const H = innerHeight, wr = words.getBoundingClientRect();
+    const gap = stack ? 28 : 48;
+    cond = stack ? Math.min(1, (0.3 * H) / wr.height) : Math.min(1, (0.9 * innerWidth) / wr.width);
+    const hw = wr.height * cond, ph = panel.offsetHeight;
+    const top = Math.max(stack ? 40 : 24, (H - (hw + gap + ph)) / 2);
+    const dy = top + hw / 2 - (wr.top + wr.height / 2);
+    panel.style.top = `${top + hw + gap}px`;
+    const still = reduced.matches;
+    words.animate([{ translate: '0 0', scale: '1' }, { translate: `0 ${dy.toFixed(1)}px`, scale: String(cond) }], { duration: still ? 0 : 900, easing: SMOOTH, fill: 'both' });
+    glow.animate([{ translate: '-50% -50%' }, { translate: `-50% calc(-50% + ${dy.toFixed(1)}px)` }], { duration: still ? 0 : 900, easing: SMOOTH, fill: 'both' });
+    panel.animate([{ opacity: 0, transform: 'translateY(14px)', filter: 'blur(6px)' }, { opacity: 1, transform: 'none', filter: 'blur(0px)' }], { duration: still ? 0 : 700, delay: still ? 0 : 280, easing: SOFT, fill: 'both' });
+
+    await done;
+    await panel.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(8px)' }], { duration: still ? 0 : 320, easing: 'ease-in', fill: 'both' }).finished;
+    el.setAttribute('aria-hidden', 'true');
   }
 
   // 3. the words fade; the capitals fly to their places in the top bar and become threads again
@@ -173,7 +219,7 @@ export async function playIntro({ brand, force = false } = {}) {
   if (!fast) {
     const b = target.getBoundingClientRect();
     const ub = b.width / VB.w;
-    const s = sE;
+    const s = sE * cond;
     texts.forEach((t, i) => anim(t, [{ opacity: 1, filter: 'blur(0px)' }, { opacity: 0, filter: 'blur(10px)' }], { duration: 420, delay: i * 30, easing: 'ease-in' }));
     glow.animate([{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(0.8)' }], { duration: Dur, easing: 'ease-in', fill: 'both' });
     chars.forEach((c, i) => {

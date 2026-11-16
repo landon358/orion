@@ -462,7 +462,11 @@ function speak(text, onAmp) {
 
 /* ---------- live client: one WebSocket to ORION's server ---------- */
 
+import { DEFAULT_SERVER } from './config.js';
+
 const PROTOCOL = 1;
+const STORE = 'orion-server';
+const save = (v) => { try { v ? localStorage.setItem(STORE, JSON.stringify(v)) : localStorage.removeItem(STORE); } catch {} };
 
 /**
  * Speaks the wire protocol in ORION-PROTOCOL.md. Keeps the same state, methods
@@ -478,32 +482,64 @@ export class RealLeoClient extends Emitter {
   metrics = sampleMetrics();          // stays flagged `sample: true` until the server sends real numbers
   tools = [];
   vitals = { gpu: 0, vram: 0, vramTotal: 8, temp: 0, tps: 0, ctx: 0, uptime: 0, queue: 0, model: 'ORION' };
-  #url; #token; #ws = null; #retry = 0; #timer = null;
+  account = null;                     // who is logged in: {id, name, role, address, features, …}
+  #url; #creds; #ws = null; #retry = 0; #timer = null; #pending = null;
   #mine = new Set();                  // ids of user messages this tab already showed
   #voiceTurn = false; #speech = null; #serverSpeaks = false;
 
-  constructor(url, token) { super(); this.#url = url; this.#token = token; }
+  /** @param {string} url @param {{token?: string, name?: string, password?: string}} creds */
+  constructor(url, creds = {}) { super(); this.#url = url; this.#creds = creds; }
 
-  async connect() { this.#open(); }
+  /** True when there's no saved login: the UI shows the login screen. */
+  get needsLogin() { return !this.#creds.token && !this.#creds.name; }
+
+  async connect() {
+    if (this.needsLogin) return this.emit('connection', { status: 'offline', mode: this.mode, reason: 'login' });
+    this.#open();
+  }
+
+  /**
+   * Log in with a name and password. Resolves once ORION's snapshot arrives;
+   * rejects with {reason: 'auth'} (wrong name or password, or locked out) or
+   * {reason: 'network'} (couldn't reach ORION).
+   */
+  login(name, password) {
+    this.#creds = { name, password };
+    this.#retry = 0;
+    if (this.#ws) { const old = this.#ws; this.#ws = null; try { old.close(); } catch {} }
+    return new Promise((resolve, reject) => { this.#pending = { resolve, reject }; this.#open(); });
+  }
 
   #open() {
     clearTimeout(this.#timer);
     this.emit('connection', { status: 'connecting', mode: this.mode });
     let ws;
-    try { ws = new WebSocket(this.#url); } catch { return this.#lost(); }
+    try { ws = new WebSocket(this.#url); } catch { if (this.#pending) { this.#settle('network'); return this.emit('connection', { status: 'offline', mode: this.mode }); } return this.#lost(); }
     this.#ws = ws;
-    ws.onopen = () => this.#raw({ type: 'hello', data: { token: this.#token, client: 'orion-ui', protocol: PROTOCOL } });
+    const who = this.#creds.name ? { name: this.#creds.name, password: this.#creds.password ?? '' } : { token: this.#creds.token ?? '' };
+    ws.onopen = () => this.#raw({ type: 'hello', data: { ...who, client: 'orion-ui', protocol: PROTOCOL } });
     ws.onmessage = (e) => { try { this.#handle(JSON.parse(e.data)); } catch (err) { console.warn('ORION: bad frame', err); } };
     ws.onclose = (e) => {
       if (this.#ws !== ws) return;
       this.#ws = null;
-      if (e.code === 4401) {                       // bad token: don't hammer the server
+      if (e.code === 4401) {                       // wrong login (or locked out): don't retry, ask again
+        this.#creds = {};
+        save({ url: this.#url });
+        this.#settle('auth');
         this.emit('connection', { status: 'offline', mode: this.mode, reason: 'auth' });
-        this.emit('notify', { id: uid('n'), title: 'ORION refused the connection', body: 'The token was not accepted. Open the link with ?server=…&token=… again.', target: {} });
         return;
       }
+      if (this.#pending) { this.#settle('network'); return this.emit('connection', { status: 'offline', mode: this.mode }); }
       this.#lost();
     };
+  }
+
+  /** Finish a login() attempt: undefined = success, otherwise why it failed. */
+  #settle(reason) {
+    const p = this.#pending;
+    this.#pending = null;
+    if (!p) return;
+    reason ? p.reject({ reason }) : p.resolve(this.account);
   }
 
   #lost() {
@@ -535,6 +571,9 @@ export class RealLeoClient extends Emitter {
         if (data.metrics) this.metrics = data.metrics;
         if (data.vitals) this.vitals = { ...this.vitals, ...data.vitals };
         this.#serverSpeaks = !!data.speaks;
+        if (data.account) this.account = data.account;
+        save({ url: this.#url, ...this.#creds });   // the next visit logs in silently
+        this.#settle();
         this.emit('connection', { status: 'online', mode: this.mode });
         const st = data.state ?? { state: 'idle', label: 'Standing by' };
         this.state = st.state;
@@ -604,15 +643,20 @@ export class RealLeoClient extends Emitter {
  */
 export function createLeoClient() {
   const q = new URLSearchParams(location.search);
+  const demo = q.has('demo');
   try {
-    if (q.has('demo')) localStorage.removeItem('orion-server');
-    if (q.get('server')) localStorage.setItem('orion-server', JSON.stringify({ url: q.get('server'), token: q.get('token') ?? '' }));
+    if (demo) localStorage.removeItem(STORE);
+    // ?server=…&token=… (or just ?token=… for the default server, as guest links do)
+    if (q.get('server') || q.get('token')) save({ url: q.get('server') || DEFAULT_SERVER, token: q.get('token') ?? '' });
   } catch {}
   if (q.has('server') || q.has('token') || q.has('demo')) {
     ['server', 'token', 'demo'].forEach((k) => q.delete(k));
     history.replaceState(null, '', location.pathname + (q.size ? `?${q}` : '') + location.hash);
   }
   let cfg = null;
-  try { cfg = JSON.parse(localStorage.getItem('orion-server') ?? 'null'); } catch {}
-  return cfg?.url ? new RealLeoClient(cfg.url, cfg.token) : new MockLeoClient();
+  try { cfg = JSON.parse(localStorage.getItem(STORE) ?? 'null'); } catch {}
+  if (demo || (!cfg?.url && !DEFAULT_SERVER)) return new MockLeoClient();
+  const url = cfg?.url || DEFAULT_SERVER;
+  const creds = cfg?.name ? { name: cfg.name, password: cfg.password } : cfg?.token ? { token: cfg.token } : {};
+  return new RealLeoClient(url, creds);
 }

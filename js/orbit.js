@@ -1,14 +1,14 @@
 /**
  * Orbit: ORION's avatar, drawn like a backlit instrument from an 80s flight deck.
  *
- * A lamp in the middle, three rings of identical lamp cells (24, 36, 48: the
- * same cell size and the same gap on every ring) and an engraved scale outside.
+ * A lamp in the middle and three tight rings of near-square lamp cells (18, 24,
+ * 30: the same cell size and the same gap on every ring). Nothing else.
  * Nothing wobbles or drifts. Everything runs on one clock (12 ticks a second),
  * and every cell behaves the same way: it switches on with a quick filament
  * warm-up and cools off a little slower, glowing redder as it dims.
  *
- * - Idle: dark engraving, and a three-lamp pointer stepping round once every
- *   24 seconds, like a standby light.
+ * - Idle: dark cells, and a three-lamp pointer stepping round once every
+ *   18 seconds, like a standby light.
  * - Thinking / working: six sectors fire in a six-cylinder order (1-5-3-6-2-4).
  *   Each firing is a stroke from the inner ring out to the outer, one tick per
  *   ring. Working fires faster than thinking.
@@ -28,11 +28,13 @@ const HZ = 12;                               // the one clock
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 
-const DISC = 0.19;                           // the lamp, as a share of the space's radius
-const RINGS = [{ r: 0.40, n: 24 }, { r: 0.575, n: 36 }, { r: 0.75, n: 48 }];
-const CELL_W = 0.068;                        // every ring the same thickness
-const CELL_GAP = 0.016;                      // and the same gap between cells
-const SCALE_IN = 0.815, SCALE_N = 96;        // the engraved scale outside the rings
+// tight: the rings sit close round the lamp and close to each other
+const DISC = 0.40;                           // the lamp, as a share of the space's radius
+const CELL_W = 0.147;                        // every ring the same thickness
+const RING_GAP = 0.04;                       // the same small gap between lamp and rings
+const RINGS = [18, 24, 30].map((n, k) => ({ n, r: DISC + RING_GAP + CELL_W / 2 + k * (CELL_W + RING_GAP) }));
+const OUTER = RINGS[2].r + CELL_W / 2;
+const CELL_GAP = 0.018;                      // and the same gap between cells
 const SECTORS = 6;
 const FIRING = [0, 4, 2, 5, 1, 3];           // 1-5-3-6-2-4
 const RISE = 0.035, FALL = 0.16;             // filament: on fast, off slower (seconds)
@@ -136,8 +138,8 @@ export class Orbit {
     if (s === 'idle' || s === 'needs-you') {
       // the standby pointer: one lamp per ring, lined up, one step every half second
       if (reduced.matches) return 0;
-      const step = Math.floor(tk / 6) % 48;
-      const at = Math.round((step / 48) * rg.n) % rg.n;
+      const step = Math.floor(tk / 6) % 36;
+      const at = Math.round((step / 36) * rg.n) % rg.n;
       return i === at ? 0.55 : 0;
     }
     return 0;
@@ -215,13 +217,13 @@ export class Orbit {
     this.#draw();
   }
 
-  #geom() { return { cx: this.W / 2, cy: this.H / 2, R: (Math.min(this.W, this.H) / 2) * 0.97 }; }
+  #geom() { return { cx: this.W / 2, cy: this.H / 2, R: (Math.min(this.W, this.H) / 2) * 0.97 / OUTER }; }
 
   #inside(e) {
     if (!this.W) return false;
     const r = this.cv.getBoundingClientRect();
     const { cx, cy, R } = this.#geom();
-    return Math.hypot(e.clientX - r.left - cx, e.clientY - r.top - cy) <= R * (SCALE_IN + 0.06);
+    return Math.hypot(e.clientX - r.left - cx, e.clientY - r.top - cy) <= R * OUTER;
   }
 
   /** A lamp's colour: deeper and redder as it dims, like a filament. */
@@ -237,34 +239,17 @@ export class Orbit {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
     const { cx, cy, R } = this.#geom();
-    const engrave = this.hover || this.selected === 'leo' ? 0.2 : 0.12;
+    const unlit = this.hover || this.selected === 'leo' ? 0.11 : 0.07;
     const th = CELL_W * R;
     const gapPx = Math.max(2, CELL_GAP * R);
     ctx.lineCap = 'butt';
 
-    // the engraved scale: fine ticks, a longer one every 8, a dot at the top
-    ctx.strokeStyle = `rgba(239,226,196,${(engrave + 0.04).toFixed(3)})`;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let i = 0; i < SCALE_N; i++) {
-      const a = TOP + (i / SCALE_N) * TAU;
-      const r0 = R * SCALE_IN, r1 = R * (SCALE_IN + (i % 8 === 0 ? 0.05 : 0.022));
-      ctx.moveTo(cx + r0 * Math.cos(a), cy + r0 * Math.sin(a));
-      ctx.lineTo(cx + r1 * Math.cos(a), cy + r1 * Math.sin(a));
-    }
-    ctx.stroke();
-
-    // the rings: an engraved edge, dark cells, and whichever lamps are lit
+    // the rings: dark cells, and whichever lamps are lit
     this.rings.forEach((rg) => {
       const r = rg.r * R;
       const step = TAU / rg.n, gap = gapPx / r;
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = `rgba(239,226,196,${(engrave * 0.6).toFixed(3)})`;
-      ctx.beginPath(); ctx.arc(cx, cy, r - th / 2 - 3, 0, TAU); ctx.stroke();
-      ctx.beginPath(); ctx.arc(cx, cy, r + th / 2 + 3, 0, TAU); ctx.stroke();
-
       ctx.lineWidth = th;
-      ctx.strokeStyle = 'rgba(214,180,106,0.07)';
+      ctx.strokeStyle = `rgba(214,180,106,${unlit})`;
       ctx.beginPath();
       for (let i = 0; i < rg.n; i++) {
         const a0 = TOP + i * step + gap / 2;
@@ -282,27 +267,9 @@ export class Orbit {
       }
     });
 
-    // a faint backlight bloom on lit cells, all the same
-    ctx.globalCompositeOperation = 'lighter';
-    this.rings.forEach((rg) => {
-      const r = rg.r * R, step = TAU / rg.n, gap = gapPx / r;
-      ctx.lineWidth = th * 1.7;
-      for (let i = 0; i < rg.n; i++) {
-        const v = rg.v[i];
-        if (v < 0.3) continue;
-        const a0 = TOP + i * step + gap / 2;
-        ctx.strokeStyle = this.#lamp(v, 0.09 * v);
-        ctx.beginPath(); ctx.arc(cx, cy, r, a0, a0 + step - gap); ctx.stroke();
-      }
-    });
-    ctx.globalCompositeOperation = 'source-over';
 
-    // the centre lamp, flat, with an engraved bezel
-    const cr = DISC * R;
+    // the centre lamp, flat
     ctx.fillStyle = this.#lamp(this.core.v);
-    ctx.beginPath(); ctx.arc(cx, cy, cr, 0, TAU); ctx.fill();
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = `rgba(239,226,196,${(engrave + 0.08).toFixed(3)})`;
-    ctx.beginPath(); ctx.arc(cx, cy, cr + 6, 0, TAU); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, DISC * R, 0, TAU); ctx.fill();
   }
 }

@@ -242,6 +242,45 @@ body.business .stage { opacity: 0; pointer-events: none; }
 .intro-words.stack { flex-direction: column; align-items: flex-start; line-height: 1.12; }
 .intro-words.stack .iw { display: flex; align-items: baseline; }
 .intro.on .intro-words .orion-mark.draw path { animation: thread 1.3s cubic-bezier(0.45, 0, 0.2, 1) var(--d, 0s) forwards; }
+/* the login: a plate under the open name. Recessed wells, a lamp for a button, a status lamp */
+.intro.gated { cursor: auto; }
+.gate-wrap { position: absolute; left: 50%; top: 62%; width: min(360px, calc(100vw - 32px)); translate: -50% 0; z-index: 1; }
+.gate {
+  display: grid; gap: 10px; padding: 14px; border-radius: 18px;
+  background: rgba(18, 17, 15, 0.62); border: 1px solid rgba(239, 226, 196, 0.1);
+  -webkit-backdrop-filter: blur(24px) saturate(140%); backdrop-filter: blur(24px) saturate(140%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 30px 80px rgba(0, 0, 0, 0.5);
+}
+.gate-in {
+  height: 52px; padding: 0 16px; border-radius: 10px; width: 100%;
+  background: #0d0c0b; border: 1px solid rgba(239, 226, 196, 0.09);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+  color: var(--text); font: 400 17px/1 var(--font); caret-color: #e7b45a;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.gate-in::placeholder { color: rgba(239, 226, 196, 0.32); }
+.gate-in:focus { outline: none; border-color: rgba(231, 180, 90, 0.55); box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6), 0 0 0 3px rgba(231, 180, 90, 0.12); }
+.gate-go {
+  height: 52px; border-radius: 10px; margin-top: 4px;
+  font: 600 15px/1 var(--font); letter-spacing: 0.01em; color: #1a1206;
+  background: hsl(36 82% 62%); border: 1px solid hsl(36 82% 70%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: background 0.12s, color 0.12s, border-color 0.12s, transform 0.1s;
+}
+.gate-go:disabled { background: rgba(214, 180, 106, 0.07); border-color: rgba(239, 226, 196, 0.08); color: rgba(239, 226, 196, 0.35); box-shadow: none; cursor: default; }
+.gate-go:not(:disabled):hover { background: hsl(38 86% 66%); }
+.gate-go:not(:disabled):active { transform: scale(0.98); }
+.gate-go:focus-visible { outline: 2px solid rgba(231, 180, 90, 0.6); outline-offset: 2px; }
+.gate-status { display: flex; align-items: center; gap: 10px; margin: 4px 2px 0; min-height: 17px; font: 400 12px/1.4 var(--mono); color: rgba(239, 226, 196, 0.5); }
+.gate-lamp { width: 8px; height: 8px; flex: none; background: rgba(214, 180, 106, 0.18); }
+.gate-status[data-kind="busy"] .gate-lamp { background: #e7b45a; animation: lamp-blink 1s steps(1) infinite; }
+.gate-status[data-kind="ok"] { color: #e7c983; }
+.gate-status[data-kind="ok"] .gate-lamp { background: #e7b45a; }
+.gate-status[data-kind="error"] { color: var(--coral); }
+.gate-status[data-kind="error"] .gate-lamp { background: var(--coral); }
+@keyframes lamp-blink { 50% { background: rgba(214, 180, 106, 0.18); } }
+@media (prefers-reduced-motion: reduce) { .gate-status[data-kind="busy"] .gate-lamp { animation: none; } }
+
 /* a capital in flight to the top bar: solid letter fading into its thread twin */
 .intro-flyer { position: fixed; z-index: 2; transform-origin: 0 0; will-change: transform; pointer-events: none; }
 .intro-flyer .ch { position: absolute; left: 0; opacity: 1; font-family: var(--font); line-height: var(--lh, 1.2); white-space: pre; }

@@ -607,7 +607,52 @@ function renderStats() {
 $$('[data-open]').forEach((b) => b.addEventListener('click', () => openDrawer(b.dataset.open)));
 $('#brand').innerHTML = orionLogo({ strands: 3, spread: 1.6 });
 $('#brand').addEventListener('click', () => playIntro({ brand: $('#brand'), force: true }));
-playIntro({ brand: $('#brand'), force: new URLSearchParams(location.search).has('intro') });
+playIntro({ brand: $('#brand'), force: new URLSearchParams(location.search).has('intro'), gate: client.needsLogin ? loginGate : null });
+
+/* ---------- login: over the open ORION name, before the capitals fly home ---------- */
+function loginGate(panel) {
+  panel.innerHTML = `
+    <form class="gate" novalidate>
+      <label class="sr-only" for="g-name">Name</label>
+      <input class="gate-in" id="g-name" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Name" enterkeyhint="next">
+      <label class="sr-only" for="g-pass">Password</label>
+      <input class="gate-in" id="g-pass" name="password" type="password" autocomplete="current-password" placeholder="Password" enterkeyhint="go">
+      <button class="gate-go" type="submit" disabled>Connect</button>
+      <p class="gate-status" role="status" aria-live="polite"><i class="gate-lamp" aria-hidden="true"></i><span>Standing by</span></p>
+    </form>`;
+  const form = panel.querySelector('form');
+  const name = form.querySelector('#g-name'), pass = form.querySelector('#g-pass'), go = form.querySelector('.gate-go');
+  const st = form.querySelector('.gate-status'), stText = st.querySelector('span');
+  let fails = 0, busy = false;
+  const status = (text, kind = '') => { st.dataset.kind = kind; stText.textContent = text; };
+  const ready = () => { go.disabled = busy || !name.value.trim() || !pass.value; };
+  form.addEventListener('input', () => { ready(); if (st.dataset.kind === 'error') status('Standing by'); });
+  if (isWide()) setTimeout(() => name.focus({ preventScroll: true }), 1100);
+  return new Promise((resolve) => {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (go.disabled) return;
+      busy = true; ready(); form.classList.add('busy');
+      status('Connecting', 'busy');
+      try {
+        await client.login(name.value.trim(), pass.value);
+        status('Connected', 'ok');
+        haptic(8);
+        setTimeout(resolve, 500);
+      } catch (err) {
+        busy = false; form.classList.remove('busy');
+        fails += 1;
+        if (err?.reason === 'network') status('Can’t reach ORION. Is he running?', 'error');
+        else status(fails >= 3 ? 'Wrong name or password. Five misses locks this device out for 10 minutes' : 'Wrong name or password', 'error');
+        pass.value = ''; ready();
+        pass.focus();
+        if (!reduced.matches) form.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-6px)' }, { transform: 'translateX(5px)' }, { transform: 'translateX(-3px)' }, { transform: 'translateX(0)' }], { duration: 360, easing: 'ease-out' });
+      }
+    });
+  });
+}
+// a saved login that stops working (password changed, account removed): ask again
+client.on('connection', ({ reason }) => { if (reason === 'auth') playIntro({ brand: $('#brand'), gate: loginGate }); });
 
 const input = $('#input');
 const setPlaceholder = () => { input.placeholder = 'Ask ORION'; };
