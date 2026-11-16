@@ -76,6 +76,28 @@ Both the chat ("let me know if…") and the panel edit the same list. Limit is 2
 The owner's brief is the morning brief (also sent as a `brief` event when the 07:30 routine runs). The
 `brief` command for the owner generates one only if today's does not exist yet (one Haiku call, about a cent).
 
+## 5b. Local / Local+ (the Claude switch)
+
+"Local" means only the free 9B on the PC answers. "Local+" means Claude (Haiku; Sonnet for the owner)
+may take research, writing and analysis. Three switches must all be on for Local+: the owner's
+**master** switch (everyone at once), the account's **own** switch, and the budget (the weekly budget
+for the owner, the 10-cent allowance for a guest). Quick requests always stay local either way.
+
+| Direction | Frame | Notes |
+|---|---|---|
+| ← UI | `snapshot.cloud` and `cloud {mode: "local"\|"local+", on, own, master, configured, allowance_left_usd, budget_remaining_usd, reason}` | `mode` is the effective state; `reason` is a one-line explanation to show next to the toggle, e.g. "Local+ is switched off for everyone by the owner". Sent on every change that affects this account |
+| UI → | `cloud {on: bool}` | this account's own switch; reply `cloud {…}` |
+| UI → (owner) | `cloud_master {on: bool}` | the master switch; every connected room gets its new `cloud {…}`; others get `error "owner only"` |
+| ← UI (owner) | `admin_snapshot.cloud_master`, `admin_snapshot.cloud_configured`, and `cloud_mode` per account in `accounts` | for the master page: one master toggle, and each account's effective mode |
+| UI → (owner) | `account_update {id, cloud: bool}` | flips one account's own switch from the master page |
+
+Suggested UI: a two-position control "Local / Local+" on every account's page, disabled (with the
+`reason`) when `on` is false for a cause the person cannot change (master off, allowance used up, no
+key). On the master page: the master toggle plus each account's mode. The `route` event on each reply
+(`tier: local | haiku | sonnet`) is the proof of which brain answered.
+
+Same over HTTP: `GET /cloud`, `POST /cloud {on}`, `POST /cloud/master {on}` (owner); `GET /me` includes `cloud`.
+
 ## 6. Owner only: the master view and account management
 
 All of these answer `error {message: "owner only"}` for anyone else.
