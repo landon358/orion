@@ -1,0 +1,235 @@
+# Connecting ORION to the ORION UI
+
+This is the brief for whoever builds ORION's server (the agent on the RTX 2070 machine). The web UI is finished and already speaks this protocol. Your job is to expose **one WebSocket endpoint** that sends the events below and accepts the commands below. Nothing in the UI needs to change.
+
+- **UI, live:** https://landon358.github.io/orion/
+- **UI code:** https://github.com/landon358/orion. The client is `RealLeoClient` in `js/leo-client.js`.
+- **Working reference server:** `tools/orion-server-example.mjs`. It has no dependencies and fakes the agent with canned replies; read it alongside this doc.
+
+## 1. Transport and security
+
+- **One WebSocket.** Every frame is UTF-8 JSON shaped `{"type": "...", "data": {...}}`. Unknown `type`s are ignored on both sides, so either side can add more later.
+- **It must be `wss://`.** The UI is served over HTTPS, so browsers block a plain `ws://` connection to anything but localhost.
+- **Recommended route: Tailscale.** Nothing gets exposed to the internet, and Tailscale provides the HTTPS:
+  1. In the tailnet admin, turn on MagicDNS and HTTPS certificates.
+  2. Run the server on `localhost:8765` on the ORION machine.
+  3. Run `tailscale serve --bg 8765`. The UI then connects to `wss://<machine-name>.<tailnet>.ts.net`. Tailscale terminates TLS and passes WebSocket upgrades through.
+  4. The user's phone and laptop must be signed in to the same tailnet.
+- **Check the Origin header.** Accept only `https://landon358.github.io` and `http://localhost:8840` (local development). Answer anything else with `403`.
+- **Authenticate with a token.**
+  - Generate a long random secret on the ORION machine, at least 32 bytes, e.g. `openssl rand -hex 32`. Keep it in an env var or config file, never in a repo.
+  - The client's **first frame** is `hello` with the token. Compare it in constant time.
+  - On a wrong or missing token, or no `hello` within 5 seconds, close with code **4401**. The UI then stops retrying and shows "ORION refused the connection".
+- **Reconnects.** The UI reconnects with backoff from 1 s up to 30 s. Every new connection does `hello` and gets a fresh `snapshot`, so the server needs no per-client resume logic.
+- **Several devices at once.** Send every event to every authenticated connection.
+
+### How the user connects a device (once per browser)
+
+```
+https://landon358.github.io/orion/?server=wss://<machine>.<tailnet>.ts.net&token=<TOKEN>
+```
+
+The UI saves both values in that browser and wipes them from the address bar. `?demo` forgets them and returns to demo data.
+
+## 2. Handshake
+
+**Client → server, first frame:**
+
+```json
+{"type": "hello", "data": {"token": "…", "client": "orion-ui", "protocol": 1}}
+```
+
+**Server → client, straight after a good hello:** a `snapshot` with everything the UI needs to draw.
+
+```json
+{"type": "snapshot", "data": {
+  "protocol": 1,
+  "speaks": false,
+  "state": {"state": "idle", "label": "Standing by", "detail": ""},
+  "tools": [ToolInfo, …],
+  "tasks": [Task, …],
+  "approvals": [Approval, …],
+  "activity": [Activity, …],
+  "vitals": Vitals,
+  "metrics": Metrics
+}}
+```
+
+- **`speaks`:** `true` if ORION plays its own voice (Kokoro). While it's `false`, the UI reads voice replies aloud with the browser's voice. See section 6.
+- **`metrics` is optional.** Without it, the Business page shows its sample data with a note saying so.
+
+## 3. Commands (client → server)
+
+| `type` | `data` | What ORION should do |
+|---|---|---|
+| `send` | `{id, text, voice}` | A message from the user. `id` is made by the client. Broadcast it back as a `message` with `role: "user"` **and the same `id`**: other devices show it, and the sending tab ignores its own. `voice: true` means the text came from the mic (browser speech recognition). Then do the work and reply. |
+| `approve` | `{id}` | Carry out the pending approval. Then send `approval` with `status: "approved"`, plus `task` and `activity` updates. |
+| `reject` | `{id}` | Discard it. Send `approval` with `status: "rejected"`. |
+| `listening` | `{on}` | Hands-free mode started or stopped. Usually just set `state` to `listening` / `idle`. |
+| `interrupt` | `{}` | The user barged in. Stop generating or speaking now, and finish the current reply with `interrupted: true`. |
+
+## 4. Events (server → client)
+
+Times are Unix milliseconds (`at`). Send any event whenever it happens; the UI merges updates by `id`.
+
+### `state`: what ORION is doing right now
+
+`{state, label, detail?, at}`
+
+- **`state`** is one of `idle | listening | thinking | working | speaking | needs-you | sleeping | error`.
+  - `thinking` and `working` make the gold disc breathe.
+  - `needs-you` puts a coral ring around it.
+- **`label`** is the short status text, e.g. "Searching the web".
+- **`detail`** is optional extra text, e.g. "orders since 9:00".
+- **A normal turn:** `thinking` → (`working` while tools run) → `speaking` while the reply streams → `idle`.
+
+### `message`: chat
+
+`{id, role: "user"|"leo", text, streaming, interrupted?, at}`
+
+- **Stream a reply** by sending the **same `id`** again and again with the **full text so far** (not deltas) and `streaming: true`.
+- **Finish** with one last frame with `streaming: false`.
+- **Animation:** each frame where the text grew makes the bands ripple, so stream at word or token granularity.
+
+### `tool`: a tool call
+
+`{call, tool, phase: "call"|"result"|"done", label, at}`
+
+- **`call`** is a unique id for this one invocation.
+- **`tool`** is a tool `id` from `tools`.
+- **Phases:** send `call` when the request goes out, `result` when data comes back, and `done` when it finishes (always send `done`, even on errors).
+- **On screen:** a tool's band glows gold from `call` until `done`. Several tools can be live at once.
+
+### `activity`: the log
+
+`{id, kind, title, detail?, taskId?, tool?, at}`
+
+- **`kind`** is one of `tool | search | think | done | approval | rejected`.
+- **Inside a reply:** `tool`, `search` and `think` entries sent between a user's `send` and the reply's first `message` frame become the reply's collapsible "N steps" list, and the live "working…" line.
+- **The home page note:** the latest `tool`/`search`/`done`/`think` items fill the "while you were gone" list.
+
+### `task`
+
+`{id, title, source, status: "queued"|"running"|"needs-you"|"done"|"rejected", progress: 0–1, createdAt}`
+
+- **`source`** is a short group name, e.g. "Ciel ops", "Research", "Planner" or "ORION machine".
+- **Partial updates** are fine: `{id, progress: 0.6}`.
+
+### `approval`: drafts waiting for the user's OK
+
+`{id, title, source, summary, preview, status: "pending"|"approved"|"rejected", at}`
+
+- **`summary`** is one line on what and why.
+- **`preview`** is the exact draft (the reply text, the ad change, and so on).
+- **Pairing:** also send a `task` with the same `id` and `status: "needs-you"`.
+- **On screen:** pending approvals appear under the bell. The UI gives the user 5 seconds to undo before it sends `approve` or `reject`.
+
+### `notify`: an in-app banner
+
+`{title, body, target?: {panel?: "activity"|"tasks"|"vitals"}}`
+
+Use it for things worth interrupting for, like a new approval. Phone push notifications are not wired up yet.
+
+### `vitals`: the ORION machine, about once a second
+
+`{gpu, vram, vramTotal, temp, tps, ctx, uptime, queue, model}`
+
+- **Units:** GPU % · VRAM GB · °C · tokens per second · context used 0–1 · uptime in seconds · queued tasks.
+- **`model`:** the model string, e.g. `"qwen3.5-9b · Q4_K_M"`.
+- **Partial updates** are fine.
+
+### `audio`: voice loudness
+
+`{amp: 0–1}`
+
+- **When:** while ORION speaks, about 20–30 times a second.
+- **On screen:** it makes the bands ripple with his voice.
+- **Ending:** send `{amp: 0}` at the end.
+
+### `metrics`: numbers for the Ciel Business page
+
+Send the whole object whenever it changes. Every field shown is used:
+
+```json
+{
+  "updatedAt": 1763251200000,
+  "days": [{"date": "2026-11-15", "orders": 2, "revenue": 132, "spend": 41, "sessions": 210, "studio": 64, "carts": 9, "checkouts": 5}],
+  "kpis": {"rating": 4.8, "reviews": 23},
+  "campaigns": [{"id": "c1", "name": "Contour living room", "status": "Active", "spendShare": 0.46, "salesShare": 0.6}],
+  "products": [{"id": "p1", "name": "Contour map, framed", "share": 0.44, "aov": 78}],
+  "recentOrders": [{"id": "#1047", "item": "Contour map, framed · 18×24", "total": 78, "at": 1763243280000, "status": "In production"}]
+}
+```
+
+- **`days`:** at least 60 days, oldest first, so the 7, 14 and 30-day views have a previous period to compare against.
+  - `revenue` and `spend` are in USD.
+  - `studio`, `carts` and `checkouts` are funnel counts: opened the map studio, added to cart, reached checkout.
+- **Sources:** Shopify for orders and revenue, Meta Ads for spend, the site's analytics for sessions and the funnel.
+- **`spendShare` / `salesShare`:** each campaign's fraction of total spend and of sales.
+- **No `sample` field:** never send one. The UI shows the "sample data" note only when it is set.
+
+### `tools`: replace the tool list
+
+`{tools: [ToolInfo, …]}`. This is rarely needed, since the list normally arrives in `snapshot`.
+
+**ToolInfo:** `{id, name, desc, calls, lastUsed}`
+
+- **On screen:** each tool is one band around ORION's disc, innermost first, in list order. The design is tuned for about 8 tools.
+- **Ids:** these have icons, so use them where they fit: `memory, planner, web, files, voice, shopify, meta, gelato`. Other ids work, with a generic icon.
+
+### `error`
+
+`{message}`. Logged to the browser console. Use it for problems with a command.
+
+## 5. A complete turn, frame by frame
+
+```
+→ {"type":"send","data":{"id":"m_k2j","text":"How are the ads doing?","voice":false}}
+← {"type":"message","data":{"id":"m_k2j","role":"user","text":"How are the ads doing?","at":…}}
+← {"type":"state","data":{"state":"thinking","label":"Thinking"}}
+← {"type":"state","data":{"state":"working","label":"Pulling Meta Ads","detail":"last 7 days"}}
+← {"type":"tool","data":{"call":"c_1","tool":"meta","phase":"call","label":"Pulling Meta Ads insights"}}
+← {"type":"activity","data":{"id":"a_1","kind":"tool","title":"Pulled Meta Ads insights","detail":"3 active ads","tool":"meta","at":…}}
+← {"type":"tool","data":{"call":"c_1","tool":"meta","phase":"result"}}
+← {"type":"tool","data":{"call":"c_1","tool":"meta","phase":"done"}}
+← {"type":"state","data":{"state":"speaking","label":"Replying"}}
+← {"type":"message","data":{"id":"m_r9","role":"leo","text":"Spend","streaming":true}}
+← {"type":"message","data":{"id":"m_r9","role":"leo","text":"Spend is $212","streaming":true}}
+   … the full text so far, each time …
+← {"type":"message","data":{"id":"m_r9","role":"leo","text":"Spend is $212 this week…","streaming":false}}
+← {"type":"state","data":{"state":"idle","label":"Standing by"}}
+```
+
+## 6. Voice
+
+**Now: phase 1, works today, nothing extra to build.**
+
+- **Listening:** the UI does speech-to-text in the browser and sends the transcript as `send` with `voice: true`.
+- **Speaking:** while `snapshot.speaks` is `false`, the UI reads the final reply aloud with the browser's voice.
+- **Barge-in:** `interrupt` arrives when the user starts talking over ORION.
+
+**Later: phase 2, ORION's own voice. Agree on it before building.**
+
+- **The plan:** stream the mic to ORION's Whisper, and have ORION play Kokoro.
+- **What's settled:** set `speaks: true` in the snapshot, and send `audio {amp}` while Kokoro talks.
+- **Not settled yet:** whether audio goes as binary WebSocket frames or as a separate stream. Raise it with the user when you get there; the UI side will be added then.
+
+## 7. Test it
+
+**Against the reference server, locally:**
+
+1. Start the UI: in the UI repo run `npx serve -l 8840 .` (or any static server on port 8840).
+2. Start the reference server: `ORION_TOKEN=dev-token node tools/orion-server-example.mjs`
+3. Open `http://localhost:8840/?server=ws://localhost:8765&token=dev-token`
+4. You should see a green connection, 8 bands, and an approval under the bell. Sending a message gets a streamed reply, with the Memory band (and Web, for "research …") glowing during the turn.
+
+**Your server, done when all of these work:**
+
+- [ ] `hello` with the right token gets a `snapshot`. A wrong token gets close code 4401.
+- [ ] Origin is checked, and the server is reachable at `wss://…ts.net` from the phone over Tailscale.
+- [ ] Replies stream under one `id` with the full text each time, and end with `streaming: false`.
+- [ ] Every tool `call` ends with a `done`.
+- [ ] The user's own message is echoed back with its `id`.
+- [ ] `approve` and `reject` change the approval's `status`, and the bell updates.
+- [ ] `interrupt` stops a reply mid-stream, and it ends with `interrupted: true`.
+- [ ] `vitals` arrive about once a second. `metrics` are real, with no `sample` field.
