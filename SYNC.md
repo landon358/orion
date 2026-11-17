@@ -29,11 +29,21 @@ This file is the hand-off list between them. Each item names its owner. Update i
 - Real `tokens` and `ms` on the final `message` frame (was "Proposed" in ORION-PROTOCOL.md; now implemented).
 - `budget.today_usd` and `budget.by_account`, `heartbeat.checks_today / alerts_today / last / next` in the admin snapshot.
 
-## Open: backend (the PC session owns these)
+## Done on the backend overnight (2026-11-17, see the PC's OVERNIGHT.md)
 
-- `metrics` for the Business page: a daily store fed by Shopify (orders, revenue, recent orders, products), Clarity
-  (sessions, funnel) and Meta (spend). Sent in `snapshot` and on change, no `sample` field, only once Shopify is
-  connected (Landon still has to paste the store token). Until then the UI keeps its sample data note.
+- `metrics` is implemented and dormant: the moment Shopify is connected, `snapshot.metrics` and `metrics` frames
+  (owner only) carry 60 days of Shopify orders/revenue, recent orders, top products, Clarity sessions and a
+  URL-based funnel per day (accumulated from the day of connection), Meta spend when that connector exists. No
+  `sample` field. **UI note:** `kpis.rating` / `kpis.reviews` have no data source and arrive as `0` / `0`; hide the
+  "★ rating from N reviews" fragment when `reviews` is 0. `spend` and `campaigns` stay 0 / empty until Meta Ads is
+  connected.
+- Replies are shorter and cleaner: padding sentences and emoji are stripped on the backend, an `ack` line
+  ("Checking your email, Commander.") appears under the reply id as soon as the first tool runs and is replaced by
+  the reply (text may shrink; render the latest text, as CLAUDE.md says).
+- New tool families the activity log will show (band in brackets): lists and reminders [planner], unit/currency/date
+  utilities [planner/web/files], `python_run` and `show_data` [files], `research` and `history_on` [web/memory].
+
+## Open: backend (the PC session owns these)
 - Style rules over the socket (`style_list` -> `style {items}`, `style_add {text}`, `style_remove {id}`) if the UI
   wants an editor; today STYLE.md is editable through HTTP `PUT /memory/file`. Not started; propose the shape here
   or in ORION-PROTOCOL.md "Proposed" and the backend will add it.
