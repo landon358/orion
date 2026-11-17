@@ -8,15 +8,47 @@ to change, see "Changing the protocol" below. Do not guess what the backend does
 ## Where the backend is
 
 - Orion runs on Landon's Windows PC in `C:\Users\lando\orion` (Python 3.12, FastAPI, Ollama with a local
-  qwen3.5 9B, plus Claude Haiku/Sonnet). It is not in this repo and not on GitHub.
-- The protocol implementation is `orion/bridge.py` there (one file, about 400 lines, with a table of how
+  qwen3.5 9B that also has vision, plus Claude Haiku 5.5 / Sonnet 5.5). It is not in this repo and not on GitHub.
+  Its own overview for coding assistants is `ARCHITECTURE.md` in that folder (document map, account model,
+  Local/Local+, always-on layer, bridge, tests, rules); `CLAUDE.md` there holds the backend session rules.
+- The protocol implementation is `orion/bridge.py` there (one file, about 800 lines, with a table of how
   each Orion event becomes a UI frame). `orion_server.py` serves it:
   - `ws://localhost:8765/` (root) and `ws://localhost:8765/ws`: the UI port, in the same process as the
-    HTTP API, so there is exactly one Orion state. `tailscale serve --bg 8765` exposes it as
-    `wss://<pc>.<tailnet>.ts.net` for phones.
+    HTTP API, so there is exactly one Orion state. `tailscale funnel --bg 8765` (public) or
+    `tailscale serve --bg 8765` (tailnet only) exposes it as `wss://<pc>.<tailnet>.ts.net` for phones.
   - `ws://localhost:8766/ws`: the same bridge on the HTTP API port (handy for local tests).
-- Its own test of this contract: `tests/test_ui_bridge.py` on the PC (origin check, 4401, snapshot,
-  echo, streaming under one id, tool call/result/done, interrupt, listening, approvals, two devices, guest).
+- Its own test of this contract: `tests/test_ui_bridge.py` on the PC, 41 live checks (origin, 4401 and
+  lockout, snapshot, streaming under one id, tools, interrupt, listening, approvals, per-device chat,
+  name+password login, watch lists, briefs, admin view, account management, Local/Local+ switches).
+
+## Current state of Orion (2026-11-16), so the UI matches what exists
+
+- **Accounts**: the owner (name "Owner", login by password or token) and 14 guest accounts, one per
+  friend, username = first name (two Evans: `Evan` and `EvanSing`), each addressed by their first name.
+  Guests are chat-only: four bands, their own facts, watch list, brief, style rules, 10-cent cloud
+  allowance, nothing that acts on the PC or touches the owner's data. Owner devices can open the admin
+  view (`admin {on}`) and manage accounts over the socket (ACCOUNTS.md).
+- **Brains**: local 9B for chat, commands, memory, heartbeat and most tool calls (free); Claude Haiku for
+  research, drafting, analysis and the morning brief; Sonnet for deep dives (owner only). **Local / Local+**:
+  the owner's master switch, each account's own switch and the budget must all allow Claude (`cloud`,
+  `cloud_master` frames; `snapshot.cloud` says which mode and why). Weekly budget 5 dollars.
+- **Attempt first**: the backend now repairs the model's tool arguments, hands a connector task to Haiku
+  when the local brain skips the tool, and withdraws a local reply that claims "I cannot" (the `text: ""`
+  reset described below) so Haiku can redo it. Replies never contain markdown.
+- **Connectors connected**: email (Gmail, read + drafts, never sends on its own), github, clarity (the
+  CIEL site), files (read md/txt/csv/xlsx/pdf/docx/images, create text files and spreadsheets, export the
+  chat), desktop and browser control. **Pending**: shopify (read-only, waiting for the store token).
+  **Not connected**: meta_ads, bambu (3D printer), fusion360. `metrics` for the business page is still
+  omitted; Shopify will feed it once connected.
+- **Memory**: `brain/SELF.md` (Orion's own account of itself), `brain/OWNER.md` (the owner's profile:
+  CIEL, friends, tools, preferences, owner-only), `brain/STYLE.md` per account (standing reply rules),
+  `HEARTBEAT.md` per account (the watch list), facts, journals, reports, workflows, notes, proposals.
+  The HTTP API reads and edits them (`GET/PUT /memory/file`); the socket covers watch lists and briefs.
+- **Hosting**: GitHub Pages today; moving to Netlify with the login screen (GO-LIVE.md). The default server
+  in `js/config.js` should be the PC's Funnel address; `orion_connect.py ui-url <netlify url>` on the PC
+  adds the new origin.
+- **Voice**: phase 1 (browser speaks). Kokoro (EN/FR) exists on the PC but server audio over the socket is
+  not designed.
 
 ## The contract (protocol 1), as the backend implements it
 
@@ -73,4 +105,6 @@ Python's http.server rather than `npx serve`; the Node reference server `tools/o
 is only a stand-in and is no longer needed.
 
 From any other machine, the reference server is still the quickest way to see the frames; it matches the
-backend except for the 10-band tool list and the real Orion replies.
+base protocol but not the 11-band tool list, the account/watch/brief/cloud/admin additions, the per-device
+chat display, the `text: ""` reset, or the real Orion replies. When in doubt, the backend's behaviour is
+what this file and ACCOUNTS.md say, and `tests/test_ui_bridge.py` on the PC is the proof.
