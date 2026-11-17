@@ -161,6 +161,7 @@ client.on('connection', ({ status, mode }) => {
   c.setAttribute('aria-label', status === 'online' ? `Connected${mode === 'mock' ? ', demo data' : ''}` : status === 'connecting' ? 'Connecting' : 'Offline');
   if (status === 'online') {
     applyAccount();
+    renderCloud();
     const s = client.snapshot();
     graph.setTools(s.tools);
     orbit.setTools(s.tools);
@@ -542,13 +543,16 @@ function upsertLeoMessage(m) {
     const meta = steps.length
       ? `<button class="meta" aria-expanded="false">${steps.length} step${steps.length === 1 ? '' : 's'}${tools.length ? ` · ${esc(tools.slice(0, 2).join(', '))}${tools.length > 2 ? ` +${tools.length - 2}` : ''}` : ''}${ICON.chev}</button>`
       : `<span class="meta">${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>`;
-    el.innerHTML = `<div class="msg-head"><span class="bracket" aria-hidden="true"></span><span class="who">ORION</span>${meta}</div><div class="body"></div>${steps.length ? `<ul class="steps-list">${steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}`;
+    el.innerHTML = `<div class="msg-head"><span class="bracket" aria-hidden="true"></span><span class="who">ORION</span><span class="route" hidden></span>${meta}</div><div class="body"></div>${steps.length ? `<ul class="steps-list">${steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}`;
     $('button.meta', el)?.addEventListener('click', (e) => e.currentTarget.setAttribute('aria-expanded', String(el.classList.toggle('open'))));
     ui.lastLeo?.classList.remove('live');
     el.classList.add('live');
     ui.lastLeo = el;
     feedInner.append(el);
     ui.messages.set(m.id, el);
+    const tier = ui.routes.get(m.id) ?? m.route?.tier ?? m.route ?? m.tier ?? (m.id !== 'welcome' ? ui.nextRoute : null);
+    if (m.id !== 'welcome') ui.nextRoute = null;
+    if (tier) tagRoute(el, tier);
   }
   const grew = m.text.length - ($('.body', el).textContent.length || 0);
   $('.body', el).textContent = m.text;
@@ -557,6 +561,66 @@ function upsertLeoMessage(m) {
   el.classList.toggle('interrupted', !!m.interrupted);
   scrollToEnd();
 }
+
+/* ---------- which brain answered: the `route` event (tier: local | haiku | sonnet) ---------- */
+const TIERS = { local: 'Local', haiku: 'Haiku', sonnet: 'Sonnet' };
+ui.routes = new Map(); ui.nextRoute = null;
+function tagRoute(el, tier) {
+  const r = el.querySelector('.route');
+  if (!r || !tier) return;
+  r.hidden = false;
+  r.dataset.tier = tier;
+  r.textContent = TIERS[tier] ?? tier;
+  r.title = tier === 'local' ? 'Answered by the local model on the PC' : `Answered by Claude ${TIERS[tier] ?? tier}`;
+}
+client.on('route', ({ tier, id }) => {
+  if (!tier) return;
+  if (id && ui.messages.has(id)) return tagRoute(ui.messages.get(id), tier);
+  if (id) return ui.routes.set(id, tier);
+  // no id: the reply that's streaming now, or else the next one
+  const live = ui.lastLeo;
+  if (live?.classList.contains('streaming')) tagRoute(live, tier);
+  else ui.nextRoute = tier;
+});
+
+/* ---------- Local / Local+: the account's own switch. A divided circle that opens into the two positions ---------- */
+let cloudWait = 0;
+function renderCloud() {
+  const box = $('#cloud');
+  const c = client.cloud;
+  box.hidden = !c;
+  if (!c) return;
+  const want = ui.cloudWant ?? !!c.own;
+  const owner = account()?.role === 'owner' || (canAct() && !account());
+  const spent = (c.allowance_left_usd ?? 1) <= 0 || (c.budget_remaining_usd ?? 1) <= 0;
+  // locked when the cause isn't this person's to change: no key, out of money, or (for guests) the master switch
+  const locked = c.configured === false || spent || (c.master === false && !owner);
+  box.classList.toggle('plus', c.mode === 'local+');
+  box.classList.toggle('want-plus', want);
+  box.classList.toggle('pending', ui.cloudWant != null);
+  $$('[data-cloud]', box).forEach((b) => {
+    const on = b.dataset.cloud === '1';
+    b.setAttribute('aria-checked', String(on === want));
+    b.disabled = locked && on;
+  });
+}
+$('#cloud').addEventListener('click', (e) => {
+  if (!e.target.closest('.cloud-sw')) return;
+  // a click anywhere on the slider flips it
+  const on = !(ui.cloudWant ?? !!client.cloud?.own);
+  const b = $(`[data-cloud="${on ? 1 : 0}"]`, $('#cloud'));
+  if (b.disabled) return;
+  {
+    ui.cloudWant = on;
+    haptic(6);
+    client.setCloud(on);
+    clearTimeout(cloudWait);
+    cloudWait = setTimeout(() => { ui.cloudWant = null; renderCloud(); }, 8000);   // no answer: show what ORION last said
+    renderCloud();
+  }
+  if (e.detail) document.activeElement?.blur();            // pointer clicks: fold back once the pointer leaves (keyboard keeps it open)
+});
+client.on('cloud', () => { clearTimeout(cloudWait); ui.cloudWant = null; renderCloud(); });
 
 function welcome() {
   if (ui.welcomed) return;

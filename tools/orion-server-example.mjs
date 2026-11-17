@@ -40,6 +40,9 @@ const approvals = new Map();
 const activity = [];
 // the watch list: one per account in the real ORION; one shared list is enough here
 let watch = { every_minutes: 30, items: [{ id: 'w1', n: 1, text: 'Tell me if my tea timer finishes' }] };
+// Local / Local+: the owner's master switch, this account's own switch, and the budget
+let cloud = { mode: 'local+', on: true, own: true, master: true, configured: true, budget_remaining_usd: 4.2, allowance_left_usd: 0.1,
+  reason: 'Claude can take research, writing and analysis. Quick things stay local.' };
 const renumber = () => { watch.items = watch.items.map((w, i) => ({ ...w, n: i + 1 })); };
 const vitals = { gpu: 6, vram: 5.9, vramTotal: 8, temp: 45, tps: 0, ctx: 0.1, uptime: 0, queue: 0, model: 'qwen3.5-9b · Q4_K_M' };
 const started = Date.now();
@@ -71,6 +74,8 @@ async function useTool(tool, label, ms = 1200) {
 let interrupted = false;
 async function respond(text) {
   interrupted = false;
+  const big = /research|plan|write|draft|analy|why|compare/i.test(text) || text.length > 90;
+  broadcast('route', { tier: cloud.mode === 'local+' && big ? 'haiku' : 'local' });
   setState('thinking', 'Thinking');
   await useTool('memory', 'Checked memory', 900);
   if (/search|research|look up/i.test(text)) { setState('working', 'Searching the web', text.slice(0, 40)); await useTool('web', 'Searched the web', 2000); }
@@ -116,6 +121,12 @@ const handlers = {
     broadcast('watch', { ...watch, result: watch.items.length < before ? 'Removed.' : 'That one wasn’t on the list.' });
   },
   watch_list(c) { c.send('watch', watch); },
+  cloud(c, { on }) {
+    cloud = { ...cloud, own: !!on, on: !!on, mode: on && cloud.master ? 'local+' : 'local',
+      reason: !cloud.master ? 'Local+ is switched off for everyone by the owner.'
+        : on ? 'Claude can take research, writing and analysis. Quick things stay local.' : 'Only the local model on the PC answers.' };
+    broadcast('cloud', cloud);
+  },
   brief(c) { setTimeout(() => c.send('brief', makeBrief(c, false)), 1200); },
 };
 // The real ORION sends a cached brief in the snapshot, or a `brief` event a few seconds after connect.
@@ -159,6 +170,7 @@ function welcome(c) {
     activity,
     vitals,
     watch,
+    cloud,
     // metrics: omitted, so the business page keeps its labelled sample data
   });
 }

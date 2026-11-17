@@ -168,6 +168,14 @@
         <button type="button" class="round-btn" id="btn-plus" aria-label="New task">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
         </button>
+        <div class="cloud" id="cloud" hidden>
+          <button type="button" class="cloud-dot" aria-label="Local or Local+"><span class="cloud-ic"><span class="l"></span><span class="r"></span></span></button>
+          <div class="cloud-sw" role="radiogroup" aria-label="Local or Local+">
+            <span class="cloud-thumb" aria-hidden="true"></span>
+            <button type="button" role="radio" data-cloud="0" aria-checked="true">Local</button>
+            <button type="button" role="radio" data-cloud="1" aria-checked="false">Local+</button>
+          </div>
+        </div>
         <span class="spacer"></span>
         <button type="button" class="round-btn voice-btn" id="btn-voice" aria-label="Start hands-free voice">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h1.5M8 8.5v7M12 5v14M16 8.5v7M19.5 12H20"/></svg>

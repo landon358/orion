@@ -106,6 +106,7 @@ export class MockLeoClient extends Emitter {
   vitals = { gpu: 8, vram: 5.9, vramTotal: 8, temp: 46, tps: 0, ctx: 0.12, uptime: 3 * 86400 + 4 * 3600 + 17 * 60, queue: 0, model: 'qwen3.5-9b · Q4_K_M' };
   brief = null;                       // {text, at, fresh}: the "while you were gone" card
   watch = { items: [], every_minutes: 30 };   // the heartbeat checklist: {items: [{id, n, text}], every_minutes}
+  cloud = null;                       // Local / Local+: {mode, on, own, master, configured, allowance_left_usd, budget_remaining_usd, reason}
   #busy = false;
   #bgTimer = null;
   #vitalsTimer = null;
@@ -142,6 +143,15 @@ export class MockLeoClient extends Emitter {
     }
     if (!on || this.#busy) this.emit('tool', { call: 'listen', tool: 'voice', phase: 'done', at: Date.now() });
     if (!on && this.state === 'listening') this.#setState('idle', 'Standing by');
+  }
+
+  /** Local / Local+: this account's own switch. */
+  setCloud(on) {
+    setTimeout(() => {
+      this.cloud = { ...this.cloud, own: on, on, mode: on ? 'local+' : 'local',
+        reason: on ? 'Claude can take research, writing and analysis. Quick things stay local.' : 'Only the local model on the PC answers. Nothing leaves the house.' };
+      this.emit('cloud', this.cloud);
+    }, 350);
   }
 
   /** The watch list: ORION checks each line on its heartbeat and tells you when one comes true. */
@@ -182,6 +192,7 @@ export class MockLeoClient extends Emitter {
       state: this.state,
       brief: this.brief,
       watch: this.watch,
+      cloud: this.cloud,
     };
   }
 
@@ -223,6 +234,7 @@ export class MockLeoClient extends Emitter {
 
   #seed() {
     const now = Date.now();
+    this.cloud = { mode: 'local+', on: true, own: true, master: true, configured: true, budget_remaining_usd: 4.2, reason: 'Claude can take research, writing and analysis. Quick things stay local.' };
     this.watch = { every_minutes: 30, items: [
       { id: 'w1', n: 1, text: 'Tell me if a Ciel order hasn’t shipped within 3 days' },
       { id: 'w2', n: 2, text: 'Let me know if the contour ad costs more than $50 a sale' },
@@ -394,6 +406,9 @@ export class MockLeoClient extends Emitter {
     this.#busy = true;
     try {
       const route = this.#route(text);
+      // which brain answers: quick things stay local, research and writing go to Claude when Local+ is on
+      const big = /research|plan|write|draft|analy|why|compare|launch/i.test(text) || text.length > 90;
+      this.emit('route', { tier: this.cloud?.mode === 'local+' && big ? (/plan|launch|analy/i.test(text) ? 'sonnet' : 'haiku') : 'local' });
       this.#setState('thinking', 'Thinking');
       await sleep(rand(700, 1100));
 
@@ -521,6 +536,7 @@ export class RealLeoClient extends Emitter {
   account = null;                     // who is logged in: {id, name, role, address, features, …}
   brief = null;                       // {text, at, fresh}: the "while you were gone" card
   watch = { items: [], every_minutes: 30 };   // the heartbeat checklist: {items: [{id, n, text}], every_minutes}
+  cloud = null;                       // Local / Local+: {mode, on, own, master, configured, allowance_left_usd, budget_remaining_usd, reason}
   #url; #creds; #ws = null; #retry = 0; #timer = null; #pending = null;
   #mine = new Set();                  // ids of user messages this tab already showed
   #voiceTurn = false; #speech = null; #serverSpeaks = false;
@@ -612,6 +628,7 @@ export class RealLeoClient extends Emitter {
         if (data.account) this.account = data.account;
         this.brief = data.brief ?? null;
         if (data.watch) this.watch = data.watch;
+        this.cloud = data.cloud ?? null;
         save({ url: this.#url, ...this.#creds });   // the next visit logs in silently
         this.#settle();
         this.emit('connection', { status: 'online', mode: this.mode });
@@ -645,6 +662,8 @@ export class RealLeoClient extends Emitter {
       case 'notify': return this.emit('notify', { id: data.id ?? uid('n'), target: {}, ...data });
       case 'brief': this.brief = data; return this.emit('brief', data);
       case 'watch': this.watch = data; return this.emit('watch', data);
+      case 'cloud': this.cloud = data; return this.emit('cloud', data);
+      case 'route': return this.emit('route', data);
       case 'error': console.warn('ORION:', data.message ?? data); return;
       default: return;                              // unknown types are ignored, so the server can add more
     }
@@ -668,6 +687,8 @@ export class RealLeoClient extends Emitter {
   watchAdd(text) { this.#cmd('watch_add', { text }); }
   watchRemove(id) { this.#cmd('watch_remove', { id }); }
   watchList() { this.#raw({ type: 'watch_list', data: {} }); }
+  /** Local / Local+ (ACCOUNTS.md §5b): this account's own switch; ORION replies with `cloud`. */
+  setCloud(on) { this.#cmd('cloud', { on: !!on }); }
   interrupt() { this.#speech?.cancel(); this.#speech = null; this.#raw({ type: 'interrupt', data: {} }); }
 
   snapshot() {
@@ -681,6 +702,7 @@ export class RealLeoClient extends Emitter {
       state: this.state,
       brief: this.brief,
       watch: this.watch,
+      cloud: this.cloud,
     };
   }
 }
