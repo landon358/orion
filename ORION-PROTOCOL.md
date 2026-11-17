@@ -250,21 +250,37 @@ Send the whole object whenever it changes. Every field shown is used:
 - [ ] `interrupt` stops a reply mid-stream, and it ends with `interrupted: true`.
 - [ ] `vitals` arrive about once a second. `metrics` are real, with no `sample` field.
 
-## Proposed (not yet in the backend)
+## Backend additions beyond the base protocol (implemented on the PC, 2026-11-17)
 
 ### Reply readouts on the final `message`
 
-The conversation shows, beside ORION's name, how many tokens a reply took (green) and how long it
-took to answer (red). Today the UI estimates both: tokens from the text (about 4 characters each,
-shown with a `~`) and time from the user's `send` to the final frame. If the final frame
-(`streaming: false`) also carried the real numbers, the UI would show those instead:
+The final frame (`streaming: false`) carries the real numbers, so the UI shows them instead of its estimates:
 
 ```json
-{ "type": "message", "id": "m_42", "role": "leo", "text": "…", "streaming": false,
-  "tokens": 312, "ms": 4870 }
+{ "type": "message", "data": { "id": "m_42", "role": "leo", "text": "…", "streaming": false,
+  "tokens": 312, "ms": 4870 } }
 ```
 
-- `tokens`: output tokens of this reply (the UI also accepts `usage: {output_tokens}`).
-- `ms`: milliseconds from receiving the user's `send` to the final frame.
+- `tokens`: output tokens of this reply (Ollama's `eval_count` for the local brain, Claude's `usage.output_tokens`
+  summed over the turn's steps). Omitted when unknown.
+- `ms`: milliseconds from the user's `send` reaching ORION to the final frame.
 
-Both are optional; older backends simply leave them out.
+### `route`: which brain answers
+
+Sent to the asking device as soon as the turn is routed, and again if ORION re-routes mid-turn (a connector task the
+local brain skipped, or a withdrawn "I cannot" reply handed to Claude):
+
+```json
+{ "type": "route", "data": { "tier": "local" | "haiku" | "sonnet", "reason": "quick request", "id": "m_42", "at": 1763251200000 } }
+```
+
+`id` is the reply message id the tier applies to. `reason` is a short phrase for tooltips.
+
+### Everything else
+
+Accounts, login, watch lists, briefs, Local / Local+, the admin view and account management: see `ACCOUNTS.md`.
+The `text: ""` reset mid-stream and the no-markdown guarantee: see `CLAUDE.md`.
+
+## Proposed (not yet in the backend)
+
+Nothing at the moment. Add new frame shapes here for Landon to approve.
