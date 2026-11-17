@@ -41,11 +41,15 @@ orion_server.py  (FastAPI, 127.0.0.1:8766)         one Orion, one state
  ├─ orion/fastpath.py     S0: unambiguous requests answered by code with no model call (time, maths, timers, lists, coins, conversions, greetings)
  ├─ orion/understand.py   S1: one local JSON call for follow-ups/corrections/cue-less messages -> standalone query, intent, tool family
  ├─ orion/utils_tools.py  deterministic utilities: units (pint), currency, date maths (dateparser), time zones, random, counts, passwords
+ ├─ orion/quickinfo.py    news headlines (Google News RSS), stock/index/crypto quotes (Yahoo Finance), scores and schedules (ESPN); no keys, cached
  ├─ orion/lists.py        named lists and to-dos as data, per account;   orion/sandbox.py   python_run: sandboxed Python for maths/data/charts
+ ├─ orion/people.py       people cards per account (people.json): relation, dated notes, last contact, saved facts; cards of people named in a
+ │                        message ride into the speaker and cloud context; owner's cards seeded from the guest accounts (14 friends)
  ├─ orion/embed.py        memory by meaning: nomic-embed-text index per account (facts, notes, journals, profile files); recall into every reply
  ├─ orion/research.py     search -> fetch -> chunk -> rank -> the few passages that answer, with sources; cached a day
  ├─ orion/privacy.py      redaction of keys, tokens, card/account numbers before anything goes to Claude
  ├─ orion/metrics.py      the Business page `metrics` object from Shopify + Clarity (+ Meta); routine metrics_refresh, Bridge.set_metrics
+ ├─ orion/push.py         phone push (ntfy or Twilio SMS), owner only: bus banners + approvals, skipped while an owner device is active
  ├─ orion/users.py        accounts: owner + guests, tokens, passwords (PBKDF2), budgets, the own Local+ switch
  ├─ orion/safety.py       risk tiers READ/LOW/CONFIRM/CRITICAL, Guard, leases, approval rules, audit log
  ├─ orion/tools.py        core tools, which ones guests get, cue regexes that decide which tools the 9B is offered
@@ -60,7 +64,7 @@ start-orion.ps1 / stop-orion.ps1 / install-autostart.ps1 / setup-tailscale.ps1 [
 ## The turn pipeline (added 2026-11-17, see OVERNIGHT.md for the full log)
 
 ```
-text -> S0 fastpath.match (code, ms)            time, maths, timers, lists, coins, conversions, greetings: tool via the Guard + templated reply
+text -> S0 fastpath.match (code, ms)            time, maths, timers, coins, conversions, news, quotes, scores, greetings: tool via the Guard + templated reply
      -> S1 understand (only if needed, ~0.7 s)  follow-ups ("and tomorrow?"), corrections, cue-less sentences -> standalone query + tool family
      -> route (regex cues + Local/Local+)       local | haiku | sonnet; fresh-info web questions -> Haiku when Local+ is on
      -> local decider                           only the family's (or cue-matched) tools; args repaired; failed call -> retry note; 2 failures -> Haiku
@@ -149,11 +153,21 @@ the reason is reported. Surfaces: UI frames `cloud` / `cloud_master`, HTTP `/clo
   deduped 24 h, empty list = no model call. Items come from chat (`watch_add`) or the UI (`watch_add` frame).
 - **Briefs**: owner = morning brief at 07:30 (Haiku, connectors, CIEL). Guest = free local "while you were away"
   on connect, cached 6 h (`data/briefs.json`).
+- **Phone push** (`orion/push.py`, added 2026-11-17): the owner's bus events (reminders and other notifications,
+  heartbeat alerts, routine results, the brief) and approvals are mirrored to a phone through ntfy (free app, a topic
+  name) or Twilio SMS. `Bridge.seconds_since_owner_frame` tells it whether an owner device is active; if one sent a
+  frame in the last `only_when_away_s` (120 s) the banner is enough and nothing is pushed. Quiet hours (23 to 7) hold
+  everything except approvals; 10-minute dedupe; `max_per_hour`. Setup `orion_connect.py push ntfy <topic>` or
+  `push twilio`; `test push`. Guests never trigger a push.
 - **Memory**: facts auto-extracted at journal time (idle 15 min or shutdown); rolling notes when history exceeds
   the window; `memory_search/list/read` tools; owner-only `memory_write` with backups in `brain/.history/`;
   Orion keeps `brain/SELF.md` current and writes `brain/proposals/*.md` for code changes it cannot make.
 - **Knowing the owner**: `brain/OWNER.md` (profile: CIEL, friends, tools, preferences) is injected into the local
   speaker on `OWNER_Q` questions and into every owner cloud turn; guests never get it (`Brain.owner_text`).
+- **People cards** (`orion/people.py`, added 2026-11-17): tools `person_note` (dated note, creates the card, a contact verb
+  sets last contact), `person_card`, `people_list`, offered on `PEOPLE_CUES` or when a known first name appears. `People.mentioned`
+  matches a full name or a unique first name (the two Evans are never guessed); `cards_for` is injected into `_local_speaker` and
+  `_cloud_context` whenever a message names someone on file. Facts saved with `remember` that name the person show on the card.
 - **Style rules**: `STYLE.md` per account (`Brain.style_items/add/remove`, tools `style_add/list/remove`, offered on
   `STYLE_CUES`); injected into every local speaker call and cloud context. A message that is itself an instruction
   (`STYLE_CMD`: "from now on…", "stop/never/always + verb…") is saved even when the decider did not call the tool.
