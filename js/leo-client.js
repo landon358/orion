@@ -83,6 +83,7 @@ function sampleAdmin() {
     ],
     heartbeat: { every_minutes: 30, last: now - 12 * m, next: now + 18 * m, checks_today: 31, alerts_today: 2 },
     integrations: { email: 'connected', meta: 'connected', github: 'connected', clarity: 'connected', printer: 'offline', shopify: 'not set up' },
+    telemetry: { today: { turns: 46, by_tier: { local: 39, haiku: 6, sonnet: 1 }, avg_ms: 3400, cost_usd: 0.083, retries: 2, escalations: 3, withdrawals: 1, fastpath: 11 } },
     safe_mode: false,
     cloud_master: true, cloud_configured: true,
     at: now,
@@ -155,6 +156,8 @@ export class MockLeoClient extends Emitter {
   vitals = { gpu: 8, vram: 5.9, vramTotal: 8, temp: 46, tps: 0, ctx: 0.12, uptime: 3 * 86400 + 4 * 3600 + 17 * 60, queue: 0, model: 'qwen3.5-9b · Q4_K_M' };
   brief = null;                       // {text, at, fresh}: the "while you were gone" card
   watch = { items: [], every_minutes: 30 };   // the heartbeat checklist: {items: [{id, n, text}], every_minutes}
+  files = null;                       // {items: [{path, name, size, modified, kind}]}: what ORION made (owner)
+  style = null;                       // {items: [{id, text}]}: this account's standing rules
   cloud = null;                       // Local / Local+: {mode, on, own, master, configured, allowance_left_usd, budget_remaining_usd, reason}
   admin = null;                       // the owner's master view (ACCOUNTS.md §6), while it's switched on
   #busy = false;
@@ -176,11 +179,25 @@ export class MockLeoClient extends Emitter {
 
   /* ---- public API: what the UI can ask of ORION ---- */
 
-  async send(text, { voice = false } = {}) {
-    const msg = { id: uid('m'), role: 'user', text, at: Date.now(), voice };
+  async send(text, { voice = false, images = null } = {}) {
+    const msg = { id: uid('m'), role: 'user', text, at: Date.now(), voice, images: images?.map(({ name, url }) => ({ name, url })) };
     if (voice) this.emit('tool', { call: 'listen', tool: 'voice', phase: 'done', at: Date.now() });
     this.emit('message', msg);
-    await this.#respond(text, { voice });
+    await this.#respond(text || (images?.length ? 'what is in this picture' : ''), { voice });
+  }
+
+  filesList() { setTimeout(() => this.emit('files', this.files), 250); }
+  fileGet(path) {
+    const f = this.files.items.find((x) => x.path === path);
+    const body = `Sample file from the demo: ${f?.name ?? path}\n`;
+    setTimeout(() => this.emit('file', { path, name: f?.name ?? path, mime: 'text/plain', data: btoa(body) }), 300);
+  }
+  styleList() { setTimeout(() => this.emit('style', this.style), 200); }
+  styleAdd(text) {
+    setTimeout(() => { this.style = { items: [...this.style.items, { id: `s${Date.now().toString(36)}`, text }] }; this.emit('style', this.style); }, 400);
+  }
+  styleRemove(id) {
+    setTimeout(() => { this.style = { items: this.style.items.filter((r) => r.id !== id) }; this.emit('style', this.style); }, 300);
   }
 
   approve(id) { this.#resolveApproval(id, 'approved'); }
@@ -353,6 +370,18 @@ export class MockLeoClient extends Emitter {
   #seed() {
     const now = Date.now();
     this.cloud = { mode: 'local+', on: true, own: true, master: true, configured: true, budget_remaining_usd: 4.2, reason: 'Claude can take research, writing and analysis. Quick things stay local.' };
+    const d = 864e5;
+    this.files = { items: [
+      { path: 'reports/ciel-orders-week-46.xlsx', name: 'ciel-orders-week-46.xlsx', size: 18432, modified: now - 3 * 3600e3, kind: 'sheet' },
+      { path: 'charts/cpa-by-day.png', name: 'cpa-by-day.png', size: 64210, modified: now - 9 * 3600e3, kind: 'image' },
+      { path: 'exports/chat-2026-11-15.txt', name: 'chat-2026-11-15.txt', size: 5120, modified: now - 2 * d, kind: 'text' },
+      { path: 'notes/black-friday-plan.md', name: 'black-friday-plan.md', size: 2210, modified: now - 4 * d, kind: 'text' },
+    ] };
+    this.style = { items: [
+      { id: 's1', text: 'Keep replies short, three sentences at most' },
+      { id: 's2', text: 'Call me Commander' },
+      { id: 's3', text: 'Money in dollars, no cents unless it matters' },
+    ] };
     this.watch = { every_minutes: 30, items: [
       { id: 'w1', n: 1, text: 'Tell me if a Ciel order hasn’t shipped within 3 days' },
       { id: 'w2', n: 2, text: 'Let me know if the contour ad costs more than $50 a sale' },
@@ -666,6 +695,8 @@ export class RealLeoClient extends Emitter {
   account = null;                     // who is logged in: {id, name, role, address, features, …}
   brief = null;                       // {text, at, fresh}: the "while you were gone" card
   watch = { items: [], every_minutes: 30 };   // the heartbeat checklist: {items: [{id, n, text}], every_minutes}
+  files = null;                       // {items: [{path, name, size, modified, kind}]}: what ORION made (owner)
+  style = null;                       // {items: [{id, text}]}: this account's standing rules
   cloud = null;                       // Local / Local+: {mode, on, own, master, configured, allowance_left_usd, budget_remaining_usd, reason}
   admin = null;                       // the owner's master view (ACCOUNTS.md §6): the last admin_snapshot, kept current
   #adminWanted = false;               // re-asked for after a reconnect
@@ -762,6 +793,8 @@ export class RealLeoClient extends Emitter {
         if (data.watch) this.watch = data.watch;
         this.cloud = data.cloud ?? null;
         if (this.#adminWanted) this.#raw({ type: 'admin', data: { on: true } });
+        this.styleList();
+        if (this.account?.features?.actions !== false) this.filesList();
         save({ url: this.#url, ...this.#creds });   // the next visit logs in silently
         this.#settle();
         this.emit('connection', { status: 'online', mode: this.mode });
@@ -795,6 +828,9 @@ export class RealLeoClient extends Emitter {
       case 'notify': return this.emit('notify', { id: data.id ?? uid('n'), target: {}, ...data });
       case 'brief': this.brief = data; return this.emit('brief', data);
       case 'watch': this.watch = data; return this.emit('watch', data);
+      case 'files': this.files = data; return this.emit('files', data);
+      case 'file': return this.emit('file', data);
+      case 'style': this.style = data; return this.emit('style', data);
       case 'cloud': this.cloud = data; return this.emit('cloud', data);
       case 'route': return this.emit('route', data);
       case 'admin_snapshot': this.admin = data; return this.emit('admin_snapshot', data);
@@ -816,13 +852,24 @@ export class RealLeoClient extends Emitter {
 
   /* ---- public API: same as the mock ---- */
 
-  async send(text, { voice = false } = {}) {
-    const msg = { id: uid('m'), role: 'user', text, at: Date.now(), voice };
+  /** `images`: [{name, mime, data (base64), url (local preview)}]; `task`: {kind, date?} from the Tasks page.
+      Both are proposed additions (ORION-PROTOCOL.md "Proposed"); an older backend ignores them. */
+  async send(text, { voice = false, images = null, task = null } = {}) {
+    const msg = { id: uid('m'), role: 'user', text, at: Date.now(), voice, images: images?.map(({ name, url }) => ({ name, url })) };
     this.#mine.add(msg.id);
     this.#voiceTurn = voice;
     this.emit('message', msg);
-    this.#cmd('send', { id: msg.id, text, voice });
+    const frame = { id: msg.id, text, voice };
+    if (images?.length) frame.images = images.map(({ name, mime, data }) => ({ name, mime, data }));
+    if (task) frame.task = task;
+    this.#cmd('send', frame);
   }
+  /** Files ORION made (owner) and the account's standing rules: proposed frames, see ORION-PROTOCOL.md. */
+  filesList() { this.#raw({ type: 'files_list', data: {} }); }
+  fileGet(path) { this.#cmd('file_get', { path }); }
+  styleList() { this.#raw({ type: 'style_list', data: {} }); }
+  styleAdd(text) { this.#cmd('style_add', { text }); }
+  styleRemove(id) { this.#cmd('style_remove', { id }); }
   approve(id) { this.#cmd('approve', { id }); }
   reject(id) { this.#cmd('reject', { id }); }
   setListening(on) { this.#raw({ type: 'listening', data: { on } }); }

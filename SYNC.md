@@ -50,13 +50,17 @@ This file is the hand-off list between them. Each item names its owner. Update i
 - Files Orion made: HTTP `GET /files` and `GET /files/download?path=` exist (owner token). A socket frame listing new
   files (`files {items}`) could be added if the UI wants a panel.
 
+- **Requested by the UI (2026-11-17), shapes in ORION-PROTOCOL.md "Proposed":** (1) `every`/`next`/`due` on
+  routine, timer and reminder tasks, so the new Tasks page's Daily and Scheduled tabs fill in; (2) the
+  "Describe your task" `send` with a `task {kind, date?}` hint: always -> watch item, daily -> routine,
+  scheduled -> dated reminder any distance ahead; (3) `files_list` / `file_get` -> `files` / `file` for the
+  owner's Files panel; (4) `style_list` / `style_add` / `style_remove` -> `style` for the "Your rules" screen;
+  (5) `images` on `send` for pictures in chat; (6) optional `sources` on the final message; (7) document the
+  `telemetry` fields in the admin snapshot.
+
 ## Open: UI (this repo's session owns these)
 
-- `js/tools.js` header comment still says 10 bands and lists `shopify` under "older ids": the backend sends 11 bands
-  for the owner (`memory, planner, web, files, voice, email, shopify, meta, clarity, github, printer`) and `shopify`
-  is live (read-only CIEL store once connected). Cosmetic.
-- `files` band: the backend now reads documents, spreadsheets, PDFs and images and creates text files and
-  spreadsheets. Its skills line (`Downloads`, `Briefs`) could say `Read`, `Create` and the group "ORION machine" fits.
+- Done 2026-11-17: `js/tools.js` lists 11 bands; `files` skills are Read / Create; Shopify is marked read-only.
 - The Business page can keep its sample note until `metrics` arrives; nothing to change. When Shopify lands, the
   backend's `days` will start with Shopify history (orders/revenue for 60 days) but `sessions`/`studio`/`carts`/
   `checkouts` only from the day Clarity collection started, so early days may be zero there.

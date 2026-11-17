@@ -1787,3 +1787,56 @@ body.chat .feed-inner { max-width: 720px; gap: 34px; }
 .detail .rows .row { font: 400 1.0625rem/1.1 "VT323", var(--mono); border-top-color: var(--rl-2); padding: 8px 12px; }
 .detail .rows .row .v { color: var(--cream); }
 .detail .rows .tool-row svg { width: 16px; height: 16px; stroke: var(--gold-l); }
+
+/* replies: a restarted reply thinks in place; sources as small links */
+.msg.leo.redo .body .working { padding: 2px 0; }
+.msg .sources { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.msg .sources a {
+  display: inline-flex; align-items: center; height: 26px; padding: 0 11px; border-radius: 999px;
+  font: 400 0.75rem var(--mono); color: var(--text-2); text-decoration: none;
+  background: rgba(255, 255, 255, 0.04); border: 1px solid var(--edge);
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.msg .sources a:hover { color: var(--cream, #f6dfae); border-color: rgba(246, 223, 174, 0.35); background: rgba(246, 223, 174, 0.06); }
+.biz-empty { padding: 28px 0; font-size: 0.875rem; line-height: 1.5; }
+.hb.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 640px) { .hb.four { grid-template-columns: repeat(2, minmax(0, 1fr)); } .hb.four .rstat:nth-child(3) { padding-left: 0; border-left: 0; } }
+.tel-bar { display: flex; gap: 2px; height: 8px; margin: 18px 0 10px; border-radius: 999px; overflow: hidden; }
+.tel-bar i { min-width: 4px; }
+.tel-key { display: flex; flex-wrap: wrap; gap: 16px; font-size: 0.75rem; color: var(--text-2); }
+.tel-key span { display: inline-flex; align-items: center; gap: 6px; }
+.tel-key b { width: 8px; height: 8px; border-radius: 2px; }
+.t-local { background: #f6dfae; } .t-haiku { background: #e9a25a; } .t-sonnet { background: #c8642e; }
+
+/* ORION's panel: your rules and the files he made */
+.detail .d-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.detail .d-list li { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 2px 6px 10px; border-bottom: 1px solid var(--rl-2); transition: opacity 0.2s; }
+.detail .d-list li.going { opacity: 0.35; }
+.detail .d-list li > span { flex: 1; min-width: 0; font-size: 1.0625rem; line-height: 1.2; color: var(--text); }
+.detail .d-list.files b { display: block; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail .d-list small { display: block; font: 400 0.9375rem "VT323", var(--mono); color: var(--text-3); }
+.detail .d-x { flex: none; width: 32px; height: 32px; display: grid; place-items: center; color: var(--text-3); transition: color 0.15s, background 0.15s; }
+.detail .d-x svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.detail .d-x:hover { color: var(--cream, #f6dfae); background: rgba(246, 223, 174, 0.07); }
+.detail .d-x:not(.dl):hover { color: var(--coral); background: rgba(224, 128, 111, 0.1); }
+.detail .d-x.busy { animation: tk-pulse 1s ease-in-out infinite; color: var(--amber); }
+.detail .d-add { display: flex; gap: 6px; margin-top: 8px; }
+.detail .d-add input { flex: 1; min-width: 0; height: 36px; padding: 0 10px; font: 400 1.0625rem "VT323", var(--mono); color: var(--text); background: rgba(0, 0, 0, 0.3); border: 1px solid var(--rl); outline: none; }
+.detail .d-add input:focus { border-color: var(--rl-2); box-shadow: 0 0 0 1px rgba(246, 223, 174, 0.35); }
+.detail .d-add button, .detail .d-more { height: 36px; padding: 0 14px; font: 400 1.0625rem "VT323", var(--mono); color: var(--cream, #f6dfae); border: 1px solid var(--rl); background: rgba(246, 223, 174, 0.05); }
+.detail .d-add button:hover, .detail .d-more:hover { background: rgba(246, 223, 174, 0.12); }
+.detail .d-more { margin-top: 8px; height: 30px; }
+
+/* pictures in the composer and in your messages */
+.pics { display: flex; gap: 8px; padding: 0 6px 10px; flex-wrap: wrap; }
+.pics[hidden] { display: none; }
+.pic { position: relative; width: 64px; height: 64px; border-radius: 14px; overflow: hidden; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--edge); }
+.pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pic.loading { animation: tk-pulse 1.2s ease-in-out infinite; }
+.pic button { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 999px; background: rgba(10, 9, 8, 0.75); color: var(--text); }
+.pic button svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.composer.drop { box-shadow: inset 0 0 0 1.5px rgba(246, 223, 174, 0.5), 0 24px 60px rgba(0, 0, 0, 0.55); }
+#btn-plus:disabled { opacity: 0.35; }
+.msg-pics { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.msg-pics img { width: 120px; height: 120px; object-fit: cover; border-radius: 12px; display: block; }
+.msg-pics:only-child { margin-bottom: 0; }

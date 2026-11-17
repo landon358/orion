@@ -395,7 +395,13 @@ function notesFor(id) {
 function renderDetail() {
   const el = $('#detail-body');
   const scroll = el.scrollTop;
+  // keep a half-typed rule (the panel repaints on every bit of activity)
+  const typing = el.contains(document.activeElement) && document.activeElement.id ? document.activeElement : null;
+  const keep = typing && { id: typing.id, value: typing.value, a: typing.selectionStart, b: typing.selectionEnd };
+  const draft = $('#rule-in', el)?.value;
   el.innerHTML = ui.selected === 'leo' ? leoDetail() : toolDetail(ui.selected);
+  if (draft) { const r = $('#rule-in', el); if (r) r.value = draft; }
+  if (keep) { const n = $(`#${keep.id}`, el); if (n) { n.value = keep.value; n.focus({ preventScroll: true }); n.setSelectionRange?.(keep.a, keep.b); } }
   el.scrollTop = scroll;
   const tool = client.tools.find((t) => t.id === ui.selected);
   $('#crumb-text').textContent = tool
@@ -431,8 +437,39 @@ function leoDetail() {
       ${cell(ICON.bell, waiting, 'Waiting on you', 'data-pop="1"')}
     </div>
     ${vitalsBlock(v)}
+    ${rulesBlock()}
+    ${canAct() ? filesBlock() : ''}
     <div class="notes-head">${ICON.notes}Recent work</div>
     ${notesFor('leo')}`;
+}
+
+/* Your rules: the "from now on…" instructions ORION keeps for this account (STYLE.md on the PC). */
+const X_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>';
+function rulesBlock() {
+  const items = client.style?.items;
+  const list = items == null
+    ? '<div class="note empty">Your rules appear here once ORION shares them.</div>'
+    : items.length
+      ? `<ul class="d-list">${items.map((r) => `<li${ui.ruleGoing?.has(r.id) ? ' class="going"' : ''}><span>${esc(r.text)}</span><button type="button" class="d-x" data-rule-x="${esc(r.id)}" aria-label="Remove rule: ${esc(r.text)}">${X_SVG}</button></li>`).join('')}</ul>`
+      : '<div class="note empty">No rules yet. Tell ORION “from now on…”, or add one here.</div>';
+  return `<div class="notes-head">${ICON.notes}Your rules</div>${list}
+    <form class="d-add" data-rule-add><input id="rule-in" maxlength="200" placeholder="Add a rule, e.g. keep it short" aria-label="New rule" autocomplete="off"><button type="submit">Add</button></form>`;
+}
+
+/* Files ORION made: his workspace on the PC, newest first, each one downloadable. */
+const KIB = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+const FILE_KIND = { sheet: 'Sheet', image: 'Picture', pdf: 'PDF', doc: 'Doc', text: 'Text' };
+function filesBlock() {
+  const items = client.files?.items;
+  let body;
+  if (items == null) body = '<div class="note empty">Files ORION makes appear here once he shares them.</div>';
+  else if (!items.length) body = '<div class="note empty">Nothing yet. Ask ORION for a spreadsheet, a chart or an export.</div>';
+  else {
+    const shown = ui.filesAll ? items : items.slice(0, 5);
+    body = `<ul class="d-list files">${shown.map((f) => `<li><span><b>${esc(f.name)}</b><small>${esc(FILE_KIND[f.kind] ?? 'File')} · ${f.size != null ? KIB(f.size) : ''}${f.modified ? ` · ${ago(f.modified)}` : ''}</small></span><button type="button" class="d-x dl${ui.fileWant?.has(f.path) ? ' busy' : ''}" data-file-get="${esc(f.path)}" aria-label="Download ${esc(f.name)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5M5 19.5h14"/></svg></button></li>`).join('')}</ul>
+      ${items.length > 5 ? `<button type="button" class="d-more" data-files-all>${ui.filesAll ? 'Show fewer' : `Show all ${items.length}`}</button>` : ''}`;
+  }
+  return `<div class="notes-head">${ICON.notes}Files ORION made</div>${body}`;
 }
 
 function toolDetail(id) {
@@ -449,7 +486,7 @@ function toolDetail(id) {
   let metric;
   if (id === 'shopify') {
     const prev = sum(days.slice(0, 7), 'orders');
-    metric = { label: 'Orders, 7 days', val: k.orders7d, unit: '', d: prev ? ((k.orders7d - prev) / prev) * 100 : null, dl: 'vs prior week', badge: 'Sample data', values: days.map((d) => d.orders), warm: true };
+    metric = { label: 'Orders, 7 days', val: k.orders7d, unit: '', d: prev ? ((k.orders7d - prev) / prev) * 100 : null, dl: 'vs prior week', badge: m.sample ? 'Sample data' : 'Live', values: days.map((d) => d.orders), warm: true };
   } else if (id === 'meta') {
     metric = { label: 'Cost per sale', val: k.cpa7d ? `$${k.cpa7d.toFixed(0)}` : '—', unit: '', d: k.cpa7d ? ((k.cpa7d - 24) / 24) * 100 : null, dl: 'vs $24 average', lower: true, badge: k.cpa7d > 30 ? 'High' : 'Moderate', values: days.map((d) => d.spend), warm: true };
   } else if (id === 'gelato') {
@@ -485,7 +522,38 @@ function toolDetail(id) {
     ${notesFor(id)}`;
 }
 
+ui.ruleGoing = new Set();
+ui.fileWant = new Set();
+ui.filesAll = false;
+$('#detail-body').addEventListener('submit', (e) => {
+  if (!e.target.matches('[data-rule-add]')) return;
+  e.preventDefault();
+  const inp = $('#rule-in', e.target);
+  const text = inp.value.trim();
+  if (!text) return;
+  client.styleAdd(text);
+  inp.value = '';
+  haptic(6);
+});
+client.on('style', () => { ui.ruleGoing.clear(); if (ui.selected === 'leo') scheduleDetail(); });
+client.on('files', () => { if (ui.selected === 'leo') scheduleDetail(); });
+client.on('file', (f) => {
+  if (!ui.fileWant.delete(f.path)) return;
+  if (ui.selected === 'leo') scheduleDetail();
+  if (f.error || !f.data) { showBanner({ id: `dl${Date.now()}`, title: 'Couldn’t download that', body: f.error ?? 'ORION sent nothing back.', target: {} }); return; }
+  const bin = atob(f.data), bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([bytes], { type: f.mime || 'application/octet-stream' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: f.name || f.path.split('/').pop() });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+});
 $('#detail-body').addEventListener('click', (e) => {
+  const rx = e.target.closest('[data-rule-x]');
+  if (rx) { ui.ruleGoing.add(rx.dataset.ruleX); client.styleRemove(rx.dataset.ruleX); scheduleDetail(); haptic(6); return; }
+  const fg = e.target.closest('[data-file-get]');
+  if (fg) { ui.fileWant.add(fg.dataset.fileGet); client.fileGet(fg.dataset.fileGet); scheduleDetail(); haptic(6); return; }
+  if (e.target.closest('[data-files-all]')) { ui.filesAll = !ui.filesAll; scheduleDetail(); return; }
   const row = e.target.closest('[data-tool]');
   if (row) { select(row.dataset.tool); haptic(6); return; }
   const x = e.target.closest('[data-explore],[data-drawer],[data-pop]');
@@ -515,7 +583,8 @@ function addUserMessage(m) {
   const el = document.createElement('div');
   el.className = 'msg user';
   if (m.voice) el.innerHTML = `<span class="voice-tag">${ICON.mic}said aloud</span><br>`;
-  el.append(document.createTextNode(m.text));
+  if (m.images?.length) el.insertAdjacentHTML('beforeend', `<span class="msg-pics">${m.images.map((p) => `<img src="${p.url}" alt="${esc(p.name ?? 'Picture')}">`).join('')}</span>`);
+  if (m.text) el.append(document.createTextNode(m.text));
   feedInner.append(el);
   const w = document.createElement('div');
   w.className = 'working';
@@ -586,13 +655,60 @@ function upsertLeoMessage(m) {
     if (m.id !== 'welcome') ui.nextRoute = null;
     if (tier) tagRoute(el, tier);
   }
-  const grew = m.text.length - ($('.body', el).textContent.length || 0);
-  $('.body', el).textContent = m.text;
+  const body = $('.body', el);
+  // ORION can take a reply back mid-stream (text resets to "") and start it again: show him thinking meanwhile
+  if (!m.text && m.streaming) {
+    el.classList.add('redo', 'streaming');
+    body.innerHTML = '<span class="working"><span class="lamps" aria-hidden="true"><i></i><i></i><i></i></span><span class="w-label">Thinking…</span></span>';
+    body._len = 0;
+    $('.tok', el).hidden = true;
+    scrollToEnd();
+    return;
+  }
+  el.classList.remove('redo');
+  const grew = m.text.length - (body._len ?? 0);
+  body._len = m.text.length;
+  renderBody(body, m);
   if (m.streaming && grew > 0) orbit.talk(Math.min(1, 0.5 + grew / 24));
   el.classList.toggle('streaming', !!m.streaming);
   el.classList.toggle('interrupted', !!m.interrupted);
   readouts(el, m);
   scrollToEnd();
+}
+
+/* Web answers end with a "Sources" line; once the reply is complete it becomes small links.
+   A `sources: [{title, url}]` list on the final frame (proposed) wins over reading the text. */
+function renderBody(body, m) {
+  const src = m.streaming ? null : splitSources(m);
+  if (!src) { body.textContent = m.text; return; }
+  body.textContent = src.text;
+  const nav = document.createElement('div');
+  nav.className = 'sources';
+  src.items.forEach(({ title, url }) => {
+    const a = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+    a.textContent = title; a.title = url;
+    nav.append(a);
+  });
+  body.append(nav);
+}
+const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
+function splitSources(m) {
+  if (Array.isArray(m.sources) && m.sources.length) {
+    const items = m.sources.filter((x) => /^https?:\/\//.test(x?.url ?? '')).map((x) => ({ url: x.url, title: x.title || hostOf(x.url) }));
+    const at = m.text.search(/\n\s*Sources?\s*:/i);
+    return items.length ? { text: (at >= 0 ? m.text.slice(0, at) : m.text).trimEnd(), items } : null;
+  }
+  const at = m.text.search(/(^|\n)\s*Sources?\s*:/i);
+  if (at < 0) return null;
+  const tail = m.text.slice(at);
+  const urlRe = /https?:\/\/[^\s,;)\]]+/g;
+  let items = [...tail.matchAll(urlRe)].map(([u]) => ({ url: u.replace(/[.]+$/, ''), title: hostOf(u.replace(/[.]+$/, '')) }));
+  // bare site names ("bbc.com, reuters.com") too, alongside or instead of full links
+  items = items.concat([...tail.replace(urlRe, ' ').replace(/^\s*Sources?\s*:/i, '').matchAll(/\b(?:[a-z0-9-]+\.)+[a-z]{2,}\b/gi)].map(([d]) => ({ url: `https://${d}`, title: d.replace(/^www\./, '') })));
+  const seen = new Set();
+  items = items.filter((x) => !seen.has(x.title) && seen.add(x.title)).slice(0, 6);
+  return items.length ? { text: m.text.slice(0, at).trimEnd(), items } : null;
 }
 
 /* Beside his name: tokens in green, seconds to answer in red. Uses the server's numbers when a
@@ -812,19 +928,70 @@ input.addEventListener('blur', () => { $('#composer').classList.remove('focus');
 form.addEventListener('submit', (e) => {
   e.preventDefault();
   const text = input.value.trim();
-  if (!text) return;
+  if (!text && !ui.pics.length) return;
+  if (ui.picsBusy) return;
   const r = input.getBoundingClientRect(), cs = getComputedStyle(input);
   ui.flyFrom = { left: r.left + parseFloat(cs.paddingLeft), top: r.top + parseFloat(cs.paddingTop) };
   input.value = '';
   autosize();
-  sendText(text);
+  const images = ui.pics;
+  ui.pics = [];
+  renderPics();
+  sendText(text, images);
 });
-function sendText(text) {
+function sendText(text, images = []) {
   // from the ORION page you stay with him while he thinks; the conversation opens with his answer
   if (ui.route === 'home') ui.holdHome = true;
   else if (ui.route !== 'chat') go('chat');
-  client.send(text);
+  client.send(text, images.length ? { images } : undefined);
 }
+
+/* ---------- pictures: up to 4, shrunk here to 1600 px JPEG before they go to ORION ---------- */
+const PIC_MAX = 4;
+ui.pics = [];
+async function shrinkPic(file) {
+  const bmp = await createImageBitmap(file).catch(() => null);
+  if (!bmp) return null;
+  const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  bmp.close?.();
+  const blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.85));
+  if (!blob) return null;
+  const data = await new Promise((res) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(',')[1]); fr.readAsDataURL(blob); });
+  return { name: `${(file.name || 'picture').replace(/\.[^.]+$/, '')}.jpg`, mime: 'image/jpeg', data, url: URL.createObjectURL(blob) };
+}
+async function addPics(files) {
+  const imgs = [...files].filter((f) => f.type.startsWith('image/')).slice(0, PIC_MAX - ui.pics.length);
+  if (!imgs.length) return;
+  ui.picsBusy = true; renderPics(imgs.length);
+  for (const f of imgs) { const p = await shrinkPic(f); if (p) ui.pics.push(p); }
+  ui.picsBusy = false; renderPics();
+  input.focus();
+}
+function renderPics(loading = 0) {
+  const box = $('#pics');
+  box.hidden = !ui.pics.length && !loading;
+  box.innerHTML = ui.pics.map((p, i) => `<span class="pic"><img src="${p.url}" alt="${esc(p.name)}"><button type="button" data-pic-x="${i}" aria-label="Remove ${esc(p.name)}">${X_SVG}</button></span>`).join('')
+    + Array.from({ length: loading }, () => '<span class="pic loading" aria-label="Preparing picture"></span>').join('');
+  $('#btn-plus').disabled = ui.pics.length >= PIC_MAX;
+}
+$('#pics').addEventListener('click', (e) => {
+  const x = e.target.closest('[data-pic-x]');
+  if (!x) return;
+  const [p] = ui.pics.splice(Number(x.dataset.picX), 1);
+  URL.revokeObjectURL(p?.url);
+  renderPics();
+});
+$('#pic-in').addEventListener('change', (e) => { addPics(e.target.files); e.target.value = ''; });
+input.addEventListener('paste', (e) => {
+  const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
+  if (files.length) { e.preventDefault(); addPics(files); }
+});
+$('#composer').addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.items ?? [])].some((i) => i.type.startsWith('image/'))) { e.preventDefault(); $('#composer').classList.add('drop'); } });
+$('#composer').addEventListener('dragleave', () => $('#composer').classList.remove('drop'));
+$('#composer').addEventListener('drop', (e) => { $('#composer').classList.remove('drop'); if (e.dataTransfer?.files?.length) { e.preventDefault(); addPics(e.dataTransfer.files); } });
 const newTask = () => {
   input.value = 'Add a task: ';
   autosize();
@@ -832,7 +999,7 @@ const newTask = () => {
   input.setSelectionRange(input.value.length, input.value.length);
 };
 $('#btn-new-task').addEventListener('click', newTask);
-$('#btn-plus').addEventListener('click', newTask);
+$('#btn-plus').addEventListener('click', () => $('#pic-in').click());
 
 /* ================================================================ */
 /* approvals: dropdown from the bell, with a 5s undo                */
@@ -1300,7 +1467,7 @@ function sendAsk() {
   if (!text) return askIn.focus();
   // the request goes out as a normal message; stay here instead of jumping to the conversation
   ui.quietSend = true;
-  client.send(`${KINDS[ui.askTab].note(ui.askDay)} ${text}`);
+  client.send(`${KINDS[ui.askTab].note(ui.askDay)} ${text}`, { task: ui.askTab === 'scheduled' ? { kind: 'scheduled', date: isoDay(ui.askDay) } : { kind: ui.askTab } });
   ask.classList.add('sent');
   $('#tk-ask-hint').textContent = 'Sent to ORION';
   haptic(10);

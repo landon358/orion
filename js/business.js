@@ -55,11 +55,17 @@ export function mountBusiness(root, { getMetrics, tooltip }) {
   function slice() {
     const m = getMetrics();
     const cur = m.days.slice(-range), prev = m.days.slice(-2 * range, -range);
+    // Visit tracking (Clarity) started later than the order history, so days before its first
+    // recorded visit have no visit data at all; they count as missing, not as zero visits.
+    const firstVisit = m.days.findIndex((d) => (d.sessions ?? 0) > 0);
+    const visitsFrom = firstVisit < 0 ? null : m.days[firstVisit].date;
+    const tracked = (d) => visitsFrom != null && d.date >= visitsFrom;
     const agg = (arr) => {
-      const orders = sum(arr, 'orders'), revenue = sum(arr, 'revenue'), spend = sum(arr, 'spend'), sessions = sum(arr, 'sessions');
-      return { orders, revenue, spend, sessions, cpa: orders ? spend / orders : null, aov: orders ? revenue / orders : null, conv: sessions ? orders / sessions : 0 };
+      const orders = sum(arr, 'orders'), revenue = sum(arr, 'revenue'), spend = sum(arr, 'spend');
+      const seen = arr.filter(tracked), sessions = sum(seen, 'sessions'), seenOrders = sum(seen, 'orders');
+      return { orders, revenue, spend, sessions, cpa: orders && spend ? spend / orders : null, aov: orders ? revenue / orders : null, conv: sessions ? seenOrders / sessions : null };
     };
-    return { m, cur, prev, a: agg(cur), b: agg(prev) };
+    return { m, cur, prev, a: agg(cur), b: agg(prev), visitsFrom, tracked };
   }
 
   /* ---------- page ---------- */
@@ -78,11 +84,11 @@ export function mountBusiness(root, { getMetrics, tooltip }) {
       { k: 'spend', label: 'Ad spend', v: bigMoney(a.spend), d: delta(a.spend, b.spend, { neutral: true }) },
       { k: 'cpa', label: 'Cost per sale', v: a.cpa ? bigMoney(a.cpa) : big('—'), d: delta(a.cpa, b.cpa, { lowerIsBetter: true }) },
       { k: 'aov', label: 'Average order', v: a.aov ? bigMoney(a.aov) : big('—'), d: delta(a.aov, b.aov) },
-      { k: 'conv', label: 'Conversion', v: big((a.conv * 100).toFixed(2), '%'), d: delta(a.conv, b.conv) },
+      { k: 'conv', label: 'Conversion', v: a.conv == null ? big('—') : big((a.conv * 100).toFixed(2), '%'), d: a.conv == null ? '<span class="kt-d">no visit data yet</span>' : delta(a.conv, b.conv) },
     ];
     root.innerHTML = `<div class="biz-in">
       <header class="biz-head">
-        <div><h1>Ciel</h1><p>Sample data · updated ${esc(ago(m.updatedAt))} by ORION · ★ ${m.kpis.rating} from ${m.kpis.reviews} reviews</p></div>
+        <div><h1>Ciel</h1><p>${m.sample ? 'Sample data · ' : ''}Updated ${esc(ago(m.updatedAt))} by ORION${m.kpis?.reviews ? ` · ★ ${m.kpis.rating} from ${m.kpis.reviews} review${m.kpis.reviews === 1 ? '' : 's'}` : ''}</p></div>
         <div class="range" role="group" aria-label="Date range"><i></i>${RANGES.map((r) => `<button data-range="${r}" aria-pressed="${r === range}">${r}d</button>`).join('')}</div>
       </header>
       <section class="kts" aria-label="Key numbers">
@@ -91,12 +97,12 @@ export function mountBusiness(root, { getMetrics, tooltip }) {
       <div class="bgrid">
         <section class="card w8"><div class="card-h"><div><h2>Revenue per day</h2><p>Hover, tap, or use the arrow keys for each day</p></div><span class="big">${bigMoney(a.revenue)}</span></div>
           <div class="chart" data-chart="revenue"></div>${table('revenue')}</section>
-        <section class="card w4"><div class="card-h"><div><h2>Store funnel</h2><p>Share of sessions reaching each step</p></div></div>
+        <section class="card w4"><div class="card-h"><div><h2>Store funnel</h2><p>${data.visitsFrom && data.cur.some((d) => !data.tracked(d)) ? `Since ${esc(dayLabel(data.visitsFrom, { month: 'short', day: 'numeric' }))}, when visit tracking started` : 'Share of sessions reaching each step'}</p></div></div>
           <div class="chart" data-chart="funnel"></div></section>
         <section class="card"><div class="card-h"><div><h2>Orders per day</h2><p>${a.orders} orders in ${range} days</p></div></div>
           <div class="chart" data-chart="orders"></div>${table('orders')}</section>
-        <section class="card"><div class="card-h"><div><h2>Ad campaigns</h2><p>Cost per sale against the account average</p></div><span class="big">${bigMoney(a.spend)}</span></div>
-          <div class="chart" data-chart="campaigns"></div>${campaignTable()}</section>
+        <section class="card"><div class="card-h"><div><h2>Ad campaigns</h2><p>${m.campaigns?.length ? 'Cost per sale against the account average' : 'Shows up once ORION is connected to Meta Ads'}</p></div>${m.campaigns?.length ? `<span class="big">${bigMoney(a.spend)}</span>` : ''}</div>
+          ${m.campaigns?.length ? `<div class="chart" data-chart="campaigns"></div>${campaignTable()}` : ''}</section>
         <section class="card"><div class="card-h"><div><h2>Top products</h2><p>By orders in the last ${range} days</p></div></div>${productTable()}</section>
         <section class="card"><div class="card-h"><div><h2>Latest orders</h2><p>Newest first, across all ranges</p></div></div>${ordersTable()}</section>
       </div>
@@ -147,7 +153,7 @@ export function mountBusiness(root, { getMetrics, tooltip }) {
     const { cur } = data;
     root.querySelectorAll('[data-spark]').forEach((svg) => {
       const k = svg.dataset.spark;
-      const vals = cur.map((d) => (k === 'cpa' ? (d.orders ? d.spend / d.orders : null) : k === 'aov' ? (d.orders ? d.revenue / d.orders : null) : k === 'conv' ? d.orders / d.sessions : d[k]));
+      const vals = cur.map((d) => (k === 'cpa' ? (d.orders ? d.spend / d.orders : null) : k === 'aov' ? (d.orders ? d.revenue / d.orders : null) : k === 'conv' ? (data.tracked(d) && d.sessions ? d.orders / d.sessions : null) : d[k]));
       spark(svg, vals);
     });
     root.querySelectorAll('[data-chart]').forEach((el) => {
@@ -243,7 +249,8 @@ export function mountBusiness(root, { getMetrics, tooltip }) {
   }
 
   function funnel(el, W) {
-    const { cur } = data;
+    const cur = data.cur.filter(data.tracked);
+    if (!cur.length) { el.innerHTML = '<p class="mute biz-empty">No visit data yet. It fills in from the day visit tracking started.</p>'; return; }
     const steps = [
       ['Sessions', sum(cur, 'sessions')],
       ['Opened the map studio', sum(cur, 'studio')],

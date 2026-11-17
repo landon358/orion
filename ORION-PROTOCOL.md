@@ -283,4 +283,97 @@ The `text: ""` reset mid-stream and the no-markdown guarantee: see `CLAUDE.md`.
 
 ## Proposed (not yet in the backend)
 
-Nothing at the moment. Add new frame shapes here for Landon to approve.
+Written by the UI session on 2026-11-17. All of these are additions: new optional fields on existing frames, or new
+frame types. Unknown fields and types are ignored on both sides, so nothing breaks before the backend has them.
+
+### 1. Times on tasks (fills the Tasks page's Daily and Scheduled tabs)
+
+The Tasks page has three tabs: **Always** (the watch list), **Daily** (routines) and **Scheduled** (a month calendar).
+Daily and Scheduled need to know when things happen. Add optional fields to `task`:
+
+```json
+{ "type": "task", "data": { "id": "routine_morning_brief", "title": "Morning brief", "source": "Routine",
+  "status": "queued", "every": "day at 07:30", "next": 1763364600000 } }
+{ "type": "task", "data": { "id": "timer_tea", "title": "Tea is ready", "source": "Timer",
+  "status": "queued", "due": 1763300000000 } }
+```
+
+- `every`: human words for the repeat ("day at 07:30", "6 hours"). Routines only.
+- `next`: epoch ms of the next run (routines). `due`: epoch ms of a timer or dated reminder.
+- Send one `task` per routine and per pending timer/reminder of the account in `snapshot.tasks`, and update `next`
+  after each run. A finished timer/reminder goes to `status: "done"`.
+- Guests get their own timers/reminders; owner routines never reach a guest.
+
+### 2. "Describe your task": new tasks from the Tasks page
+
+Each tab has a New button. The person describes the task in plain words, and the UI sends an ordinary `send`
+with a short note in front **and** a `task` hint field:
+
+```json
+{ "type": "send", "data": { "id": "m_51", "text": "[New task · Daily: do this every day] Sum up last night's orders at 7",
+  "voice": false, "task": { "kind": "daily" } } }
+{ "type": "send", "data": { "id": "m_52", "text": "[New task · Scheduled for Monday 2026-12-14] Remind me to renew the domain",
+  "voice": false, "task": { "kind": "scheduled", "date": "2026-12-14" } } }
+```
+
+- `task.kind`: `"always"` -> add a watch item (`watch_add`), `"daily"` -> create a routine at the time the text names
+  (or a sensible default), `"scheduled"` -> a dated reminder on `task.date` (any distance ahead: weeks or months),
+  at the time the text names, else 09:00 local.
+- ORION confirms in a short reply and sends the matching `watch` or `task` frame so it appears on the right tab.
+- Without the `task` field (older UI), the bracketed note in the text says the same thing.
+
+### 3. Files ORION made (owner only)
+
+A panel lists the files in ORION's workspace and lets the owner download them, over the socket so the login
+(name + password) is enough and no HTTP token or CORS is needed:
+
+```json
+{ "type": "files_list", "data": {} }
+{ "type": "files", "data": { "items": [ { "path": "exports/chat-2026-11-17.txt", "name": "chat-2026-11-17.txt",
+  "size": 4210, "modified": 1763300000000, "kind": "text" } ] } }
+{ "type": "file_get", "data": { "path": "exports/chat-2026-11-17.txt" } }
+{ "type": "file", "data": { "path": "exports/chat-2026-11-17.txt", "name": "chat-2026-11-17.txt",
+  "mime": "text/plain", "data": "<base64>" } }
+```
+
+- `items` newest first, the `files/` workspace only (not Documents/Desktop). `kind`: text, sheet, image, pdf, doc, other.
+- `file_get` on a file over 15 MB, or outside the workspace: `file {path, error}`.
+- Send `files` again (unasked) when ORION creates a new file, so the panel updates.
+- Guests: `files {items: []}`.
+
+### 4. Your rules (style rules over the socket)
+
+The "from now on…" rules in each account's STYLE.md, listed and removable in the UI:
+
+```json
+{ "type": "style_list", "data": {} }
+{ "type": "style", "data": { "items": [ { "id": "s3", "text": "Keep replies under three sentences" } ] } }
+{ "type": "style_add", "data": { "text": "Call me Commander" } }
+{ "type": "style_remove", "data": { "id": "s3" } }
+```
+
+Every change replies with the full `style` list. Per account; guests manage their own.
+
+### 5. Pictures in chat
+
+The local model has vision. The composer can attach up to 4 pictures, resized in the browser to at most
+1600 px on the long side (JPEG, usually under 500 KB):
+
+```json
+{ "type": "send", "data": { "id": "m_53", "text": "What plant is this?", "voice": false,
+  "images": [ { "name": "IMG_2041.jpg", "mime": "image/jpeg", "data": "<base64>" } ] } }
+```
+
+- Treat each image like `file_read` on a picture: the local model describes it, a cloud turn gets the image block.
+- `text` may be empty when only a picture is sent.
+- Reject anything over 4 images or 6 MB in total with an `error` frame.
+
+### 6. Sources on web answers (optional, nicer than parsing)
+
+Web answers end with a "Sources" line today; the UI turns that line into small links. If the final `message`
+also carried `sources: [{title, url}]`, the UI would use that instead of parsing the text.
+
+### 7. `admin_snapshot.telemetry` shape
+
+The admin page draws whatever `telemetry` holds. Please document its fields here (the UI looks for per-tier counts,
+`cost_usd`, average `ms`, retries, escalations and withdrawals over today / 7 days).

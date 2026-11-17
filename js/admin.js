@@ -137,6 +137,7 @@ export function mountAdmin(root, { client, onTokenCopied } = {}) {
           <section class="dsec" aria-labelledby="adm-au-h"><h2 id="adm-au-h">Audit</h2><p class="dd">The last actions ORION's safety layer saw.</p><div data-paint="audit"></div></section>
         </div>
       </div>
+      <section class="dsec wide" aria-labelledby="adm-t-h"><h2 id="adm-t-h">How ORION is doing</h2><p class="dd">Today's replies: which brain answered, how fast, and what it cost.</p><div data-paint="telemetry"></div></section>
       <section class="dsec wide" aria-labelledby="adm-h-h"><h2 id="adm-h-h">Last 24 hours</h2><p class="dd">Activity per room, one dot per hour. Brighter is busier.</p><div data-paint="heat"></div></section>
       <div class="adm-grid three">
         <section class="dsec" aria-labelledby="adm-r-h"><h2 id="adm-r-h">Routines</h2><div data-paint="routines"></div></section>
@@ -144,7 +145,7 @@ export function mountAdmin(root, { client, onTokenCopied } = {}) {
         <section class="dsec" aria-labelledby="adm-i-h"><h2 id="adm-i-h">Integrations</h2><div data-paint="integrations"></div></section>
       </div>
     </div>`;
-    ['kpis', 'accounts', 'add', 'room', 'wall', 'edit', 'budget', 'audit', 'heat', 'routines', 'heartbeat', 'integrations'].forEach(paint);
+    ['kpis', 'accounts', 'add', 'room', 'wall', 'edit', 'budget', 'audit', 'heat', 'routines', 'heartbeat', 'integrations', 'telemetry'].forEach(paint);
   }
 
   function paint(part) {
@@ -324,6 +325,27 @@ export function mountAdmin(root, { client, onTokenCopied } = {}) {
         ${rest(h, ['every_minutes', 'checks_today', 'alerts_today', 'last', 'next'])}`;
     },
 
+    /* admin_snapshot.telemetry (data/turns.sqlite on the PC). Its fields aren't documented yet, so this
+       reads the likely names and lists anything else as plain rows. */
+    telemetry() {
+      let t = snap.telemetry;
+      if (!t || typeof t !== 'object') return '<p class="mute">No numbers yet.</p>';
+      t = t.today ?? t.day ?? t['24h'] ?? t;
+      const pickN = (...ks) => { for (const k of ks) if (typeof t[k] === 'number') return t[k]; return null; };
+      const tiers = t.by_tier ?? t.tiers ?? t.tier ?? {};
+      const tierN = { local: tiers.local ?? 0, haiku: tiers.haiku ?? 0, sonnet: tiers.sonnet ?? 0 };
+      const total = pickN('turns', 'replies', 'count', 'total') ?? (tierN.local + tierN.haiku + tierN.sonnet);
+      const ms = pickN('avg_ms', 'ms_avg', 'latency_ms', 'avg_latency_ms', 'mean_ms');
+      const cost = pickN('cost_usd', 'cost', 'spent_usd');
+      const sumT = tierN.local + tierN.haiku + tierN.sonnet;
+      const bar = sumT ? `<div class="tel-bar" role="img" aria-label="${Object.entries(tierN).map(([k, v]) => `${TIER_NAME[k]} ${v}`).join(', ')}">${Object.entries(tierN).filter(([, v]) => v).map(([k, v]) => `<i class="t-${k}" style="flex:${v}"></i>`).join('')}</div>
+        <p class="tel-key">${Object.entries(tierN).filter(([, v]) => v).map(([k, v]) => `<span><b class="t-${k}"></b>${TIER_NAME[k]} ${v}</span>`).join('')}</p>` : '';
+      const stat = (l, v) => `<div class="rstat"><span class="dk-l">${l}</span>${v}</div>`;
+      return `<div class="hb four">${stat('Replies', num(total ?? '—'))}${stat('Average answer', ms == null ? num('—') : num((ms / 1000).toFixed(1), 's'))}${stat('Cost', cost == null ? num('—') : num(cost.toFixed(2), '$', true))}${stat('Handed to Claude', num(pickN('escalations', 'escalated') ?? '—'))}</div>
+        ${bar}
+        ${rest(t, ['turns', 'replies', 'count', 'total', 'avg_ms', 'ms_avg', 'latency_ms', 'avg_latency_ms', 'mean_ms', 'cost_usd', 'cost', 'spent_usd', 'escalations', 'escalated'])}`;
+    },
+
     integrations() {
       const g = snap.integrations;
       if (!g || typeof g !== 'object') return '<p class="mute">No integrations reported.</p>';
@@ -332,6 +354,7 @@ export function mountAdmin(root, { client, onTokenCopied } = {}) {
     },
   };
 
+  const TIER_NAME = { local: 'Local', haiku: 'Haiku', sonnet: 'Sonnet' };
   const KIND = { said: 'Said', reply: 'ORION', tool: 'Tool', search: 'Search', think: 'Think', done: 'Done', approval: 'OK?', rejected: 'Blocked', task: 'Task', notify: 'Notice', watch: 'Watch', brief: 'Brief', activity: 'Activity' };
 
   /** Semicircle gauge: share of the cap spent, money left in the middle. */

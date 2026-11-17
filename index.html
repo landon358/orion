@@ -127,6 +127,8 @@
     <div class="stats" id="stats" role="list"></div>
 
     <div class="composer" id="composer">
+      <div class="pics" id="pics" hidden></div>
+      <input type="file" id="pic-in" accept="image/*" multiple hidden>
       <form class="ask" id="compose-form" autocomplete="off">
         <label class="ask-field">
           <span class="sr-only">Message ORION</span>
@@ -143,7 +145,7 @@
       </div>
 
       <div class="dock-row">
-        <button type="button" class="round-btn" id="btn-plus" aria-label="New task">
+        <button type="button" class="round-btn" id="btn-plus" aria-label="Add a picture" title="Add a picture">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
         </button>
         <div class="cloud" id="cloud" hidden>
