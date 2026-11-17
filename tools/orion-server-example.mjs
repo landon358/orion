@@ -94,7 +94,18 @@ const handlers = {
   reject(c, { id }) { decide(id, 'rejected'); },
   listening(c, { on }) { if (on && state.state === 'idle') setState('listening', 'Listening'); if (!on && state.state === 'listening') setState('idle', 'Standing by'); },
   interrupt() { interrupted = true; },
+  brief(c) { setTimeout(() => c.send('brief', makeBrief(c, false)), 1200); },
 };
+// The real ORION sends a cached brief in the snapshot, or a `brief` event a few seconds after connect.
+function makeBrief(c, fresh = true) {
+  const guest = /^guest/i.test(c.name);
+  return {
+    text: guest
+      ? 'Your tea timer finished at 3:10. Nothing on your watch list needed you.\n\nLast time we talked about winter hiking boots; I can pick that up again.'
+      : 'Ciel had 2 orders since this morning. The contour ad is still the cheapest per sale.\n\nOne approval is waiting under the bell.',
+    at: Date.now() - 40 * 60e3, fresh,
+  };
+}
 function decide(id, status) {
   const a = approvals.get(id);
   if (!a || a.status !== 'pending') return;
@@ -167,6 +178,7 @@ server.on('upgrade', (req, socket) => {
         c.name = d.name || 'Owner';
         if (!ok) { c.close(4401, 'bad token'); return; }
         c.authed = true; clearTimeout(helloTimer); clients.add(c); welcome(c);
+        setTimeout(() => c.send('brief', makeBrief(c)), 2500);
         continue;
       }
       Promise.resolve(handlers[msg.type]?.(c, msg.data ?? {})).catch((e) => c.send('error', { message: String(e) }));

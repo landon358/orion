@@ -104,6 +104,7 @@ export class MockLeoClient extends Emitter {
   metrics = sampleMetrics();
   tools = TOOLS.map((t) => ({ ...t, calls: Math.round(rand(2, 30)), lastUsed: Date.now() - rand(5, 300) * 60e3 }));
   vitals = { gpu: 8, vram: 5.9, vramTotal: 8, temp: 46, tps: 0, ctx: 0.12, uptime: 3 * 86400 + 4 * 3600 + 17 * 60, queue: 0, model: 'qwen3.5-9b · Q4_K_M' };
+  brief = null;                       // {text, at, fresh}: the "while you were gone" card
   #busy = false;
   #bgTimer = null;
   #vitalsTimer = null;
@@ -142,6 +143,9 @@ export class MockLeoClient extends Emitter {
     if (!on && this.state === 'listening') this.#setState('idle', 'Standing by');
   }
 
+  /** Ask for the brief now. The demo's is fixed, so it just comes back. */
+  requestBrief() { setTimeout(() => this.brief && this.emit('brief', { ...this.brief, fresh: false }), 300); }
+
   /** Barge-in: user started talking or tapped the orb while ORION speaks. */
   interrupt() {
     this.#speakAbort?.();
@@ -156,6 +160,7 @@ export class MockLeoClient extends Emitter {
       vitals: this.vitals,
       tools: this.tools.map((t) => ({ ...t })),
       state: this.state,
+      brief: this.brief,
     };
   }
 
@@ -197,6 +202,10 @@ export class MockLeoClient extends Emitter {
 
   #seed() {
     const now = Date.now();
+    this.brief = {
+      text: 'Ciel had 3 orders overnight, $186 in all, and the contour living room ad is still the cheapest per sale at $39. Two new five-star reviews came in. Black Friday CIEL10 is set to go live on the 27th.\n\nOne thing needs you: a draft reply to the Gelato support thread is waiting under the bell.',
+      at: now - 2 * 3600e3, fresh: true,
+    };
     const seedTasks = [
       { title: 'Morning Ciel briefing', source: 'Ciel ops', status: 'done', progress: 1, createdAt: now - 6 * 3600e3 },
       { title: 'Summarize new reviews', source: 'Ciel ops', status: 'done', progress: 1, createdAt: now - 3 * 3600e3 },
@@ -483,6 +492,7 @@ export class RealLeoClient extends Emitter {
   tools = [];
   vitals = { gpu: 0, vram: 0, vramTotal: 8, temp: 0, tps: 0, ctx: 0, uptime: 0, queue: 0, model: 'ORION' };
   account = null;                     // who is logged in: {id, name, role, address, features, …}
+  brief = null;                       // {text, at, fresh}: the "while you were gone" card
   #url; #creds; #ws = null; #retry = 0; #timer = null; #pending = null;
   #mine = new Set();                  // ids of user messages this tab already showed
   #voiceTurn = false; #speech = null; #serverSpeaks = false;
@@ -572,6 +582,7 @@ export class RealLeoClient extends Emitter {
         if (data.vitals) this.vitals = { ...this.vitals, ...data.vitals };
         this.#serverSpeaks = !!data.speaks;
         if (data.account) this.account = data.account;
+        this.brief = data.brief ?? null;
         save({ url: this.#url, ...this.#creds });   // the next visit logs in silently
         this.#settle();
         this.emit('connection', { status: 'online', mode: this.mode });
@@ -603,6 +614,7 @@ export class RealLeoClient extends Emitter {
       case 'vitals': this.vitals = { ...this.vitals, ...data }; return this.emit('vitals', this.vitals);
       case 'audio': return this.emit('audio', data);
       case 'notify': return this.emit('notify', { id: data.id ?? uid('n'), target: {}, ...data });
+      case 'brief': this.brief = data; return this.emit('brief', data);
       case 'error': console.warn('ORION:', data.message ?? data); return;
       default: return;                              // unknown types are ignored, so the server can add more
     }
@@ -620,6 +632,8 @@ export class RealLeoClient extends Emitter {
   approve(id) { this.#cmd('approve', { id }); }
   reject(id) { this.#cmd('reject', { id }); }
   setListening(on) { this.#raw({ type: 'listening', data: { on } }); }
+  /** Ask for the brief now (ORION rate-limits; a cached one comes back with fresh: false). */
+  requestBrief() { this.#raw({ type: 'brief', data: {} }); }
   interrupt() { this.#speech?.cancel(); this.#speech = null; this.#raw({ type: 'interrupt', data: {} }); }
 
   snapshot() {
@@ -631,6 +645,7 @@ export class RealLeoClient extends Emitter {
       vitals: this.vitals,
       tools: this.tools.map((t) => ({ ...t })),
       state: this.state,
+      brief: this.brief,
     };
   }
 }

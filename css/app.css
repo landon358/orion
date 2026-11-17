@@ -878,6 +878,14 @@ body:not(.home) .summary, .detail-open .summary { opacity: 0; transform: transla
 .summary.gone { opacity: 0; transform: translateY(-10px); pointer-events: none; }
 .sum-hi { margin: 0; font-size: 1.875rem; font-weight: 300; line-height: 1.12; letter-spacing: -0.025em; }
 .sum-lead { margin: 6px 0 18px; font-size: 0.9375rem; color: var(--text-2); }
+/* the brief: ORION's own words, set a little larger than the list under it */
+.sum-brief { margin: 10px 0 20px; animation: rise 0.6s var(--spring) both; animation-delay: 0.08s; }
+.sum-brief p { margin: 0 0 8px; font-size: 0.9375rem; line-height: 1.5; color: var(--text); text-wrap: pretty; }
+.sum-brief p:nth-child(n + 2) { color: var(--text-2); }
+.sum-brief time { display: block; margin-top: 2px; font: 400 0.6875rem/1.6 var(--mono); color: var(--text-3); }
+.sum-wait::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 8px; vertical-align: 2px; background: var(--gold); animation: sum-blink 1s steps(1) infinite; }
+@keyframes sum-blink { 50% { opacity: 0.15; } }
+@media (prefers-reduced-motion: reduce) { .sum-wait::after { animation: none; } }
 .sum-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 13px; }
 .sum-list li { display: grid; grid-template-columns: 1fr auto; column-gap: 14px; animation: rise 0.6s var(--spring) both; animation-delay: calc(0.15s + var(--i, 0) * 0.07s); }
 .sum-list .t { font-size: 0.9375rem; line-height: 1.35; }
@@ -1176,6 +1184,8 @@ body.business .biz { opacity: 1; visibility: visible; transform: none; transitio
   .sum-list li { padding: 11px 0; border-top: 1px solid var(--edge); }
   .sum-list li:last-child { border-bottom: 1px solid var(--edge); }
   .sum-list .d { display: none; }
+  .sum-brief { margin: 6px 0 16px; }
+  .sum-brief p { font-size: 0.9375rem; }
   .sum-flag { margin-top: 14px; }
   .sum-ask { margin-top: 16px; flex-direction: row; flex-wrap: wrap; gap: 8px; }
   .sum-ask span { display: none; }

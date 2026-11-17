@@ -167,6 +167,7 @@ client.on('connection', ({ status, mode }) => {
     s.tools.forEach(seedHourly);
     welcome();
     renderStats(); renderDetail();
+    askForBrief();
     renderSummary();
     setDetail(false);
     if (ui.route === 'business') biz.render();
@@ -567,7 +568,9 @@ function welcome() {
   const pending = s.approvals.filter((a) => a.status === 'pending').length;
   upsertLeoMessage({
     id: 'welcome', role: 'leo', streaming: false,
-    text: canAct()
+    text: client.mode === 'live'
+      ? `${greet}, ${address()}.${pending ? ` ${pending === 1 ? 'One approval is' : `${pending} approvals are`} waiting under the bell.` : ''}`
+      : canAct()
       ? `${greet}. While you were away I finished ${done} tasks and kept an eye on Ciel.${pending ? ` ${pending === 1 ? 'One approval is' : `${pending} approvals are`} waiting under the bell.` : ''}`
       : `${greet}, ${address()}. What can I do for you?`,
   });
@@ -1446,16 +1449,40 @@ const ASK_GUEST = [
   ['Set a timer for 10 minutes', 'Set a timer'],
   ['Research something for me', 'Research something'],
 ];
+/* ---------- the brief: ORION's "while you were gone", from the snapshot or a `brief` event ---------- */
+// It usually arrives a few seconds after connecting; if not, ask once.
+let briefTimer = 0;
+function askForBrief() {
+  clearTimeout(briefTimer);
+  if (client.brief || account()?.features?.brief === false) return;
+  ui.briefWaiting = true;
+  briefTimer = setTimeout(() => {
+    if (!client.brief) client.requestBrief();
+    briefTimer = setTimeout(() => { ui.briefWaiting = false; renderSummary(); }, 20000);   // give up on the placeholder
+  }, 6000);
+}
+client.on('brief', () => { clearTimeout(briefTimer); ui.briefWaiting = false; renderSummary(); });
+
+/** The brief's text as paragraphs; list markers from the model are dropped. */
+function briefHTML(b) {
+  const paras = String(b.text ?? '').split(/\n+/).map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '').trim()).filter(Boolean);
+  return paras.map((p) => `<p>${esc(p)}</p>`).join('');
+}
+
 function renderSummary() {
   const s = client.snapshot();
-  const away = s.activity.filter((a) => ['tool', 'search', 'done', 'think'].includes(a.kind)).sort((a, b) => b.at - a.at).slice(0, 4);
+  const b = s.brief?.text ? s.brief : null;
+  const away = s.activity.filter((a) => ['tool', 'search', 'done', 'think'].includes(a.kind)).sort((a, b) => b.at - a.at).slice(0, b ? 3 : 4);
   const done = s.tasks.filter((t) => t.status === 'done').length;
   const h = new Date().getHours();
+  const lead = b ? ''
+    : ui.briefWaiting ? '<span class="sum-wait">putting your brief together</span>'
+    : client.mode === 'mock' && canAct() ? `while you were gone I finished ${done} task${done === 1 ? '' : 's'} and kept an eye on Ciel.`
+    : away.length ? 'here’s what I’ve been up to for you.'
+    : canAct() ? 'nothing new since you were last here.' : 'ask me anything. I can research, calculate, check the weather and set timers.';
   $('#summary').innerHTML = `
     <h2 class="sum-hi">Hello ${esc(address())},</h2>
-    <p class="sum-lead">${canAct()
-      ? `while you were gone I finished ${done} task${done === 1 ? '' : 's'} and kept an eye on Ciel.`
-      : away.length ? 'here’s what I’ve been up to for you.' : 'ask me anything. I can research, calculate, check the weather and set timers.'}</p>
+    ${b ? `<div class="sum-brief" title="Brief from ${esc(agoLong(b.at))}">${briefHTML(b)}<time>${esc(agoLong(b.at))}</time></div>` : `<p class="sum-lead">${lead}</p>`}
     <ol class="sum-list">${away.map((a, i) => `<li style="--i:${i}"><span class="t">${esc(a.title)}</span><time>${ago(a.at)}</time>${a.detail ? `<span class="d">${esc(a.detail)}</span>` : ''}</li>`).join('')}</ol>
     <p class="sum-flag" id="sum-flag"></p>
     <div class="sum-ask"><span>${h < 12 ? 'This morning, ask me' : 'Ask me'}</span>${(canAct() ? ASK : ASK_GUEST).map(([say, label]) => `<button data-say="${esc(say)}">${esc(label)}</button>`).join('')}</div>`;
