@@ -8,6 +8,9 @@
 
 const esc = (s = '') => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const money = (v) => `$${Math.round(v).toLocaleString()}`;
+/** A thin numeral with its unit set small: $ before money, % after rates. */
+const big = (v, unit = '', pre = false) => `<span class="num">${pre ? `<small>${unit}</small>` : ''}${v}${pre ? '' : `<small>${unit}</small>`}</span>`;
+const bigMoney = (v) => big(Math.round(v).toLocaleString(), '$', true);
 const sum = (arr, k) => arr.reduce((s, d) => s + d[k], 0);
 const dayLabel = (iso, opts = { weekday: 'short', month: 'short', day: 'numeric' }) => new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, opts);
 const ago = (t) => {
@@ -67,15 +70,15 @@ export function mountBusiness(root, { getMetrics, tooltip }) {
       if (x == null || y == null || !y) return '<span class="kt-d">no earlier data</span>';
       const p = (x - y) / y;
       const dir = Math.abs(p) < 0.005 ? 'flat' : (p > 0) !== lowerIsBetter ? 'good' : 'bad';
-      return `<span class="kt-d"><b class="${neutral ? 'flat' : dir}">${p > 0 ? '+' : ''}${Math.round(p * 100)}%</b>vs previous ${range} days</span>`;
+      return `<span class="kt-d"><b class="dchip ${neutral ? 'flat' : dir}">${p > 0 ? '+' : ''}${Math.round(p * 100)}%</b>vs previous ${range} days</span>`;
     };
     const tiles = [
-      { k: 'revenue', label: 'Revenue', v: money(a.revenue), d: delta(a.revenue, b.revenue), hero: true },
-      { k: 'orders', label: 'Orders', v: a.orders.toLocaleString(), d: delta(a.orders, b.orders) },
-      { k: 'spend', label: 'Ad spend', v: money(a.spend), d: delta(a.spend, b.spend, { neutral: true }) },
-      { k: 'cpa', label: 'Cost per sale', v: a.cpa ? money(a.cpa) : '—', d: delta(a.cpa, b.cpa, { lowerIsBetter: true }) },
-      { k: 'aov', label: 'Average order', v: a.aov ? money(a.aov) : '—', d: delta(a.aov, b.aov) },
-      { k: 'conv', label: 'Conversion', v: `${(a.conv * 100).toFixed(2)}%`, d: delta(a.conv, b.conv) },
+      { k: 'revenue', label: 'Revenue', v: bigMoney(a.revenue), d: delta(a.revenue, b.revenue), hero: true },
+      { k: 'orders', label: 'Orders', v: big(a.orders.toLocaleString()), d: delta(a.orders, b.orders) },
+      { k: 'spend', label: 'Ad spend', v: bigMoney(a.spend), d: delta(a.spend, b.spend, { neutral: true }) },
+      { k: 'cpa', label: 'Cost per sale', v: a.cpa ? bigMoney(a.cpa) : big('—'), d: delta(a.cpa, b.cpa, { lowerIsBetter: true }) },
+      { k: 'aov', label: 'Average order', v: a.aov ? bigMoney(a.aov) : big('—'), d: delta(a.aov, b.aov) },
+      { k: 'conv', label: 'Conversion', v: big((a.conv * 100).toFixed(2), '%'), d: delta(a.conv, b.conv) },
     ];
     root.innerHTML = `<div class="biz-in">
       <header class="biz-head">
@@ -86,13 +89,13 @@ export function mountBusiness(root, { getMetrics, tooltip }) {
         ${tiles.map((t) => `<div class="kt ${t.hero ? 'hero' : ''}"><span class="kt-l">${t.label}</span><span class="kt-v">${t.v}</span>${t.d}<svg class="spk" data-spark="${t.k}" aria-hidden="true"></svg></div>`).join('')}
       </section>
       <div class="bgrid">
-        <section class="card w8"><div class="card-h"><div><h2>Revenue per day</h2><p>Hover, tap, or use the arrow keys for each day</p></div><span class="big">${money(a.revenue)}</span></div>
+        <section class="card w8"><div class="card-h"><div><h2>Revenue per day</h2><p>Hover, tap, or use the arrow keys for each day</p></div><span class="big">${bigMoney(a.revenue)}</span></div>
           <div class="chart" data-chart="revenue"></div>${table('revenue')}</section>
         <section class="card w4"><div class="card-h"><div><h2>Store funnel</h2><p>Share of sessions reaching each step</p></div></div>
           <div class="chart" data-chart="funnel"></div></section>
         <section class="card"><div class="card-h"><div><h2>Orders per day</h2><p>${a.orders} orders in ${range} days</p></div></div>
           <div class="chart" data-chart="orders"></div>${table('orders')}</section>
-        <section class="card"><div class="card-h"><div><h2>Ad campaigns</h2><p>Cost per sale against the account average</p></div><span class="big">${money(a.spend)}</span></div>
+        <section class="card"><div class="card-h"><div><h2>Ad campaigns</h2><p>Cost per sale against the account average</p></div><span class="big">${bigMoney(a.spend)}</span></div>
           <div class="chart" data-chart="campaigns"></div>${campaignTable()}</section>
         <section class="card"><div class="card-h"><div><h2>Top products</h2><p>By orders in the last ${range} days</p></div></div>${productTable()}</section>
         <section class="card"><div class="card-h"><div><h2>Latest orders</h2><p>Newest first, across all ranges</p></div></div>${ordersTable()}</section>
@@ -132,7 +135,7 @@ export function mountBusiness(root, { getMetrics, tooltip }) {
     const { a, m } = data;
     const rows = m.products.map((p) => ({ ...p, orders: Math.round(a.orders * p.share) })).sort((x, y) => y.orders - x.orders);
     const max = Math.max(1, ...rows.map((r) => r.orders));
-    return `<table class="btable"><thead><tr><th>Product</th><th class="r">Orders</th><th class="r">Revenue</th></tr></thead><tbody>${rows.map((p) => `<tr><td>${esc(p.name)}<svg viewBox="0 0 100 4" preserveAspectRatio="none" style="display:block;width:100%;height:4px;margin-top:6px" aria-hidden="true"><rect width="100" height="4" rx="2" fill="rgba(255,255,255,0.06)"/><rect width="${(p.orders / max) * 100}" height="4" rx="2" fill="#d6b46a"/></svg></td><td class="r">${p.orders}</td><td class="r">${money(p.orders * p.aov)}</td></tr>`).join('')}</tbody></table>`;
+    return `<table class="btable"><thead><tr><th>Product</th><th class="r">Orders</th><th class="r">Revenue</th></tr></thead><tbody>${rows.map((p) => `<tr><td>${esc(p.name)}<svg class="pbar" viewBox="0 0 100 3" preserveAspectRatio="none" aria-hidden="true"><rect class="trk" width="100" height="3"/><rect class="cu" width="${(p.orders / max) * 100}" height="3"/></svg></td><td class="r">${p.orders}</td><td class="r">${money(p.orders * p.aov)}</td></tr>`).join('')}</tbody></table>`;
   }
   function ordersTable() {
     const cls = { 'Awaiting approval': 'warn', 'In production': 'ok', Shipped: 'ok', Delivered: '' };
@@ -153,17 +156,19 @@ export function mountBusiness(root, { getMetrics, tooltip }) {
     });
   }
 
+  /** Under each number: a thin copper bar per day, the latest one lit. */
   function spark(svg, vals) {
-    const W = svg.clientWidth || 160, H = 40;
+    const W = svg.clientWidth || 160, H = 44;
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    const known = vals.map((v, i) => [i, v]).filter(([, v]) => v != null);
+    const known = vals.filter((v) => v != null);
     if (known.length < 2) { svg.innerHTML = ''; return; }
-    const max = Math.max(...known.map(([, v]) => v)), min = Math.min(...known.map(([, v]) => v));
-    const x = (i) => 4 + (i / (vals.length - 1)) * (W - 8);
-    const y = (v) => H - 5 - ((v - min) / (max - min || 1)) * (H - 10);
-    const d = known.map(([i, v], j) => `${j ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('');
-    const [li, lv] = known.at(-1);
-    svg.innerHTML = `<path d="${d}" fill="none" stroke="rgba(231,201,131,0.55)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${x(li)}" cy="${y(lv)}" r="4" fill="#e7c983" stroke="#141312" stroke-width="2"/>`;
+    const max = Math.max(...known), min = Math.min(0, ...known);
+    const n = vals.length, gap = n > 20 ? 1.5 : 3, bw = Math.max(1, (W - gap * (n - 1)) / n);
+    svg.innerHTML = vals.map((v, i) => {
+      if (v == null) return '';
+      const h = Math.max(2, ((v - min) / (max - min || 1)) * (H - 4));
+      return `<rect class="cu ${i === n - 1 ? 'now' : ''}" x="${(i * (bw + gap)).toFixed(1)}" y="${(H - h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="1"/>`;
+    }).join('');
   }
 
   function lineChart(el, W) {
@@ -181,7 +186,7 @@ export function mountBusiness(root, { getMetrics, tooltip }) {
     const yt = ticks.map((t) => `<line class="${t ? 'grid' : 'base'}" x1="${padL}" x2="${W - padR}" y1="${y(t)}" y2="${y(t)}"/><text x="${padL - 8}" y="${y(t) + 3}" text-anchor="end">${tickText(t, '$')}</text>`).join('');
     const last = pts.at(-1);
     el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" height="${H}" tabindex="0" role="img" aria-label="Revenue per day for the last ${cur.length} days">
-      <defs><linearGradient id="bizArea" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#e7c983" stop-opacity="0.16"/><stop offset="1" stop-color="#e7c983" stop-opacity="0.02"/></linearGradient></defs>
+      <defs><linearGradient id="bizArea" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#e9b57c" stop-opacity="0.22"/><stop offset="1" stop-color="#e9b57c" stop-opacity="0"/></linearGradient></defs>
       ${yt}${xt}<path class="area" d="${area}"/><path class="line" d="${line}"/>
       <circle class="dot" cx="${last[0]}" cy="${last[1]}" r="4"/>
       <g class="xhair" visibility="hidden"><line class="xh" y1="${padT}" y2="${H - padB}"/><circle class="dot" r="5"/></g>

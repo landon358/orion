@@ -190,7 +190,7 @@ Send the whole object whenever it changes. Every field shown is used:
 
 **ToolInfo:** `{id, name, desc, calls, lastUsed}`
 
-- **On screen:** each tool is one band around ORION's disc, innermost first, in list order. The design is tuned for about 8 tools.
+- **On screen:** each tool is a row in the Vitals panel, in list order, with its own detail page. Any number of tools works; ids the UI doesn't know get a generic icon.
 - **Ids:** these have icons, so use them where they fit: `memory, planner, web, files, voice, shopify, meta, gelato`. Other ids work, with a generic icon.
 
 ### `error`
@@ -249,3 +249,22 @@ Send the whole object whenever it changes. Every field shown is used:
 - [ ] `approve` and `reject` change the approval's `status`, and the bell updates.
 - [ ] `interrupt` stops a reply mid-stream, and it ends with `interrupted: true`.
 - [ ] `vitals` arrive about once a second. `metrics` are real, with no `sample` field.
+
+## Proposed (not yet in the backend)
+
+### Reply readouts on the final `message`
+
+The conversation shows, beside ORION's name, how many tokens a reply took (green) and how long it
+took to answer (red). Today the UI estimates both: tokens from the text (about 4 characters each,
+shown with a `~`) and time from the user's `send` to the final frame. If the final frame
+(`streaming: false`) also carried the real numbers, the UI would show those instead:
+
+```json
+{ "type": "message", "id": "m_42", "role": "leo", "text": "…", "streaming": false,
+  "tokens": 312, "ms": 4870 }
+```
+
+- `tokens`: output tokens of this reply (the UI also accepts `usage: {output_tokens}`).
+- `ms`: milliseconds from receiving the user's `send` to the final frame.
+
+Both are optional; older backends simply leave them out.

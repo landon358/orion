@@ -1,6 +1,8 @@
 import { createLeoClient } from './leo-client.js';
-import { LeoGraph, drawHub, GROUPS, SKILLS } from './graph.js';
+import { groupOf, skillsOf, describe } from './tools.js';
 import { mountBusiness } from './business.js';
+import { mountAdmin } from './admin.js';
+import { setBackdrop } from './backdrop.js';
 import { orionLogo } from './logo.js';
 import { playIntro } from './intro.js';
 import { Orbit } from './orbit.js';
@@ -32,6 +34,10 @@ const ICON = {
   shopify: svg('<path d="M5.5 8.5h13l-1.2 11h-10.6Z"/><path d="M9 10.5V7a3 3 0 0 1 6 0v3.5"/>'),
   meta: svg('<path d="M4 14.5v-5l11-4.5v14Z"/><path d="M7.5 15.5 9 20h3l-1.2-3.8M18 9.5a3 3 0 0 1 0 5"/>'),
   gelato: svg('<path d="M7 9V4h10v5"/><rect x="4" y="9" width="16" height="7" rx="2"/><path d="M7 13.5h10V20H7Z"/>'),
+  email: svg('<rect x="3.5" y="5.5" width="17" height="13" rx="2.5"/><path d="m4.5 7 7.5 6 7.5-6"/>'),
+  clarity: svg('<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/><path d="M12 9v1M15 12h-1"/>'),
+  github: svg('<circle cx="6.5" cy="5.5" r="2"/><circle cx="6.5" cy="18.5" r="2"/><circle cx="17.5" cy="8.5" r="2"/><path d="M6.5 7.5v9M17.5 10.5c0 4-11 2.5-11 6"/>'),
+  printer: svg('<path d="M7 9V4h10v5"/><rect x="4" y="9" width="16" height="7" rx="2"/><path d="M7 13.5h10V20H7Z"/><path d="M16.5 11.5h.01"/>'),
   orders: svg('<path d="M5.5 8.5h13l-1.2 11h-10.6Z"/><path d="M9 10.5V7a3 3 0 0 1 6 0v3.5"/>'),
   revenue: svg('<path d="M12 3.5v17M16 7.5c-.8-1.2-2.2-1.8-4-1.8-2.3 0-3.8 1.1-3.8 2.8 0 4 7.8 2 7.8 6.2 0 1.7-1.6 2.9-4 2.9-1.9 0-3.4-.7-4.2-2"/>'),
   target: svg('<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="3.5"/><circle cx="12" cy="12" r=".6"/>'),
@@ -62,7 +68,7 @@ const ICON = {
 
 const ACTIVE = new Set(['thinking', 'working', 'speaking', 'listening']);
 const UNDO_MS = 5000;
-const EXPLORE = { shopify: 'business', meta: 'business', gelato: 'business', planner: 'tasks', leo: 'vitals' };
+const EXPLORE = { shopify: 'business', meta: 'business', clarity: 'business', gelato: 'business', planner: 'tasks' };
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 
 const client = createLeoClient();
@@ -71,13 +77,15 @@ const client = createLeoClient();
 // The mock and a token login with no account info behave as the owner.
 const account = () => client.account ?? null;
 const canAct = () => account()?.features?.actions !== false;
+/** The master view: the owner only (features.admin); the mock and a bare token login count as the owner. */
+const canAdmin = () => (account() ? account().features?.admin === true || (account().role === 'owner' && account().features?.admin !== false) : canAct());
 /** How ORION addresses this person: their `address` ("sir", "Commander"), else their name. */
 const address = () => account()?.address || (canAct() ? 'sir' : account()?.name) || 'sir';
 function applyAccount() {
   body.classList.toggle('guest', !canAct());
-  if (!canAct() && ui.route === 'business') go('home');
+  body.classList.toggle('no-admin', !canAdmin());
+  if ((!canAct() && ui.route === 'business') || (!canAdmin() && ui.route === 'admin')) go('home');
 }
-const graph = new LeoGraph($('#graph'));
 const body = document.body;
 const root = document.documentElement;
 const wideMQ = matchMedia('(min-width: 900px)');
@@ -94,11 +102,9 @@ const ui = {
   lastLeo: null,
   selected: 'leo',
   detailOpen: false,
-  view: 'graph',
-  flowGroup: null,
   popOpen: false,
   drawerOpen: false,
-  panel: 'activity',
+  panel: 'tasks',
   convoOpen: true,
   state: 'idle', stateLabel: 'Standing by', stateDetail: '',
   gpuHistory: Array(32).fill(6),
@@ -113,7 +119,6 @@ const ui = {
   sessionCalls: 0,
   lastJob: Date.now() - 6 * 60e3,
 };
-// the light strands run through ORION: his hub in the network view, his orb in the flow view
 // the phone's orbit: ORION's core, a ring, his tools
 const orbit = new Orbit($('#orbit'));
 
@@ -126,30 +131,51 @@ function layout() {
   root.style.setProperty('--dock-h', `${dockH}px`);
   const topH = $('#topbar').offsetHeight;
   if (isWide()) {
-    // the map keeps its framing on every page so nothing jumps when the column forms
-    const sum = $('#summary').offsetWidth;
-    const right = ui.detailOpen ? 400 : sum ? sum + 56 + 28 : 24;
-    graph.setInsets({ top: topH + 6, bottom: ui.route === 'home' ? dockH + 30 + 52 : 150, left: 96, right });
-    graph.setLine(ui.route === 'chat', lineBox());
-    // the rings: centred in the open space on the ORION page; a small column on the left while chatting
-    const box = ui.route === 'chat'
-      ? { left: 20, top: topH + 36, width: 272, height: innerHeight - topH - 36 - 56 }
-      : { left: 96, top: topH + 6, width: innerWidth - 96 - right, height: innerHeight - topH - 6 - (dockH + 40) };
+    const right = ui.detailOpen ? 400 : 0;
+    let box;
+    let side = false;
+    if (ui.route === 'chat') {
+      // the open space left of the conversation, under the rail: ORION there, his state beneath
+      // the chat box's left edge, where its slide ends (not mid-animation)
+      const avail = innerWidth - 88 - right;
+      const dockL = 88 + avail / 2 - Math.min(720, avail - 48) / 2;
+      const railB = $('.rail').getBoundingClientRect().bottom || topH + 340;
+      const dockB = innerHeight - 18;                                 // the chat box's bottom edge
+      const LABEL = 34;                                                // the status line under the sphere
+      const size = Math.round(Math.min(190, dockL * 0.62, dockB - railB - 28 - LABEL));
+      if (size >= 120 && dockL >= 240) {                               // room for the panel and its full status line
+        side = true;
+        const cx = dockL / 2, top = dockB - LABEL - size;              // centred between the wall and the chat box, down at the bottom
+        box = { left: cx - size / 2, top, width: size, height: size };
+        root.style.setProperty('--ms-x', `${Math.round(cx)}px`);
+        root.style.setProperty('--ms-y', `${Math.round(top + size - 1)}px`);
+        root.style.setProperty('--ms-w', `${size}px`);
+        root.style.setProperty('--ms-max', `${Math.round(dockL - 32)}px`);   // never reaches the chat box
+      } else {
+        // too narrow for that: a small instrument at the head of the column, its state beside it
+        const cx = (88 + innerWidth - right) / 2, sz = 52;
+        box = { left: cx - sz / 2, top: topH + 2, width: sz, height: sz };
+        root.style.setProperty('--ms-x', `${Math.round(cx + sz / 2 + 12)}px`);
+        root.style.setProperty('--ms-y', `${Math.round(topH + 2 + sz / 2)}px`);
+      }
+    } else {
+      // ORION page: centred in the window, between the top bar and the composer
+      const free = innerHeight - topH - (dockH + 40);
+      const size = Math.max(160, Math.min(400, free * 0.7, (innerWidth - right) * 0.42));
+      box = { left: (innerWidth - right - size) / 2, top: topH + (free - size) / 2, width: size, height: size };
+    }
     Object.assign($('#orbit').style, { left: `${box.left}px`, top: `${box.top}px`, width: `${Math.max(0, box.width)}px`, height: `${Math.max(0, box.height)}px` });
+    body.classList.toggle('orb-side', side);
+    orbit.retro = side;
   } else {
+    body.classList.remove('orb-side');
     $('#orbit').removeAttribute('style');
-    graph.setInsets({ top: 10, bottom: 36, left: 10, right: 10 });
-    graph.setLine(false);
   }
   placeSummary();
-  if (ui.view === 'flow') renderFlow();
-}
-function lineBox() {
-  return { x: 156, top: $('#topbar').offsetHeight + 36, bottom: innerHeight - 56 };
 }
 new ResizeObserver(layout).observe($('#dock'));
 addEventListener('resize', layout);
-wideMQ.addEventListener('change', () => { setDetail(ui.detailOpen && isWide()); applyRoute(); graph.paused = true; });
+wideMQ.addEventListener('change', () => { setDetail(ui.detailOpen && isWide()); applyRoute(); });
 
 /* ================================================================ */
 /* client events                                                    */
@@ -163,7 +189,6 @@ client.on('connection', ({ status, mode }) => {
     applyAccount();
     renderCloud();
     const s = client.snapshot();
-    graph.setTools(s.tools);
     orbit.setTools(s.tools);
     s.tools.forEach(seedHourly);
     welcome();
@@ -172,27 +197,28 @@ client.on('connection', ({ status, mode }) => {
     renderSummary();
     setDetail(false);
     if (ui.route === 'business') biz.render();
+    if (ui.route === 'admin') adm.open();
     layout();
   }
 });
 
 client.on('state', ({ state, label, detail }) => {
   ui.state = state; ui.stateLabel = label; ui.stateDetail = detail ?? '';
-  graph.setState(state, label.toLowerCase());
   orbit.setState(state);
-  $('#m-state').textContent = detail ? `${label} · ${detail}` : label;
+  if (/claude/i.test(detail ?? '')) orbit.setClaude(true);
+  else if (!ACTIVE.has(state)) orbit.setClaude(false);
+  // just the word: no brain names or arguments
+  $('#m-state').textContent = state === 'thinking' ? 'Thinking' : state === 'working' ? 'Calling' : label;
   $('#composer').classList.toggle('busy', ['thinking', 'working', 'speaking'].includes(state));
   if (ACTIVE.has(state)) ui.lastJob = Date.now();
   voice.onLeoState(state);
   if (ui.turn && state === 'thinking' && !ui.turn.steps.length) setWorking(label);
-  if (ui.view === 'flow') renderFlowState();
   if (ui.selected === 'leo') scheduleDetail();
 });
 
-client.on('audio', ({ amp }) => { graph.setLevel(amp); orbit.setLevel(amp); voice.leoAmp = amp; flowOrb.level = amp; });
+client.on('audio', ({ amp }) => { orbit.setLevel(amp); voice.leoAmp = amp; });
 
 client.on('tool', (e) => {
-  graph.toolEvent(e);
   orbit.toolEvent(e);
   const t = client.tools.find((x) => x.id === e.tool);
   if (e.phase === 'call') {
@@ -213,30 +239,26 @@ client.on('tool', (e) => {
     ui.liveCalls.delete(e.call);
   }
   if (e.tool === ui.selected) scheduleDetail();
-  if (ui.view === 'flow' && ui.flowGroup === 'tools') scheduleFlow();
 });
 
 client.on('message', (m) => (m.role === 'user' ? addUserMessage(m) : upsertLeoMessage(m)));
 
 client.on('activity', (a) => {
   if (ui.turn && ['tool', 'search', 'think'].includes(a.kind)) { ui.turn.steps.push(a.title); setWorking(`${a.title}…`); }
-  if (ui.drawerOpen && ui.panel === 'activity') renderActivity();
-  if (ui.drawerOpen && ui.panel === 'watch' && isHeartbeat(a)) renderWatch();
+  if (tasksOpen() && a.kind === 'think') renderTasks();
   if (ui.selected === 'leo' || a.tool === ui.selected) scheduleDetail();
 });
 
 client.on('task', () => {
-  if (ui.drawerOpen && ui.panel === 'tasks') renderTasks();
+  if (tasksOpen()) renderTasks();
   renderStats();
-  if (ui.view === 'flow') scheduleFlow();
   if (ui.selected === 'leo') scheduleDetail();
 });
 
 client.on('approval', (a) => {
   if (a.status === 'pending' && !ui.knownApprovals.has(a.id)) { ui.knownApprovals.add(a.id); bumpBadge(); }
   updateBadge(); renderApprovals(); renderStats(); renderSummaryFlag();
-  if (ui.drawerOpen && ui.panel === 'tasks') renderTasks();
-  if (ui.view === 'flow') scheduleFlow();
+  if (tasksOpen()) renderTasks();
 });
 
 client.on('metrics', () => {
@@ -249,8 +271,15 @@ client.on('vitals', (v) => {
   ui.tpsHistory.push(v.tps); ui.tpsHistory.shift();
   ui.gpuHistory.push(v.gpu); ui.gpuHistory.shift();
   renderStats();
-  if (ui.drawerOpen && ui.panel === 'vitals') updateVitals(v);
   if (ui.selected === 'leo') scheduleDetail();
+});
+
+// ORION can replace the tool list mid-session (rare): keep the vitals list and an open tool detail current
+client.on('tools', (tools) => {
+  tools.forEach(seedHourly);
+  orbit.setTools(tools);
+  if (ui.selected !== 'leo' && !tools.some((t) => t.id === ui.selected)) setDetail(false);
+  else scheduleDetail();
 });
 
 client.on('notify', (n) => showBanner(n));
@@ -259,17 +288,10 @@ client.on('notify', (n) => showBanner(n));
 /* graph: select a node to see it in the detail panel               */
 /* ================================================================ */
 
-graph.onSelect = (id) => {
-  if (id) { select(id); haptic(6); return; }
-  // tapped empty space
-  setDetail(false);
-};
-
 orbit.onSelect = (id) => { select(id); haptic(6); };
 
 function select(id, { open = true } = {}) {
   ui.selected = id;
-  graph.select(id);
   orbit.select(id);
   renderDetail();
   if (open) setDetail(true);
@@ -280,7 +302,7 @@ function setDetail(open) {
   body.classList.toggle('detail-open', open);
   if (!isWide()) $('#scrim').classList.toggle('on', open || ui.drawerOpen);
   root.style.setProperty('--detail-drag', '0px');
-  if (!open && ui.selected !== 'leo') { ui.selected = 'leo'; graph.select(isWide() ? 'leo' : null); orbit.select(null); }
+  if (!open && ui.selected !== 'leo') { ui.selected = 'leo'; orbit.select(null); }
   layout();
 }
 $('#btn-detail-close').addEventListener('click', () => setDetail(false));
@@ -353,6 +375,8 @@ const uptime = (u) => `${Math.floor(u / 86400)}d ${Math.floor((u % 86400) / 3600
 
 function seedHourly(t) {
   if (ui.hourly.has(t.id)) return;
+  // a live ORION has no per-hour history to send, so its counts start at zero; only the demo invents a past
+  if (client.mode !== 'mock') return void ui.hourly.set(t.id, new Array(24).fill(0));
   let seed = [...t.id].reduce((a, c) => a + c.charCodeAt(0), 0);
   const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
   const hours = Array.from({ length: 24 }, (_, i) => {
@@ -375,8 +399,8 @@ function renderDetail() {
   el.scrollTop = scroll;
   const tool = client.tools.find((t) => t.id === ui.selected);
   $('#crumb-text').textContent = tool
-    ? `${GROUPS[tool.id] ?? 'Tool'} · ${tool.name} · ${tool.calls} calls today`
-    : `ORION overview · ${client.vitals.model.split(' · ')[0]} on RTX 2070`;
+    ? `${groupOf(tool.id)} · ${describe(tool).name} · ${tool.calls} calls today`
+    : 'ORION overview';
 }
 
 function leoDetail() {
@@ -390,10 +414,9 @@ function leoDetail() {
   return `
     <div class="d-kicker">${ICON.leo}<span>Agent · runs on your PC</span></div>
     <h2 class="d-title">ORION</h2>
-    <p class="d-sub">Qwen 3.5 9B on an RTX 2070, always on</p>
     <div class="d-status">
       <div class="st-text"><span class="badge ${badge}">${esc(ui.stateLabel)}</span><br>Up <b>${uptime(v.uptime)}</b> · last job <b>${agoLong(ui.lastJob)}</b></div>
-      <button class="explore" data-explore="vitals">Explore details ${ICON.chev}</button>
+      <button class="explore" data-drawer="tasks">Tasks ${ICON.chev}</button>
     </div>
     <div class="metric cool">
       <div class="metric-head"><span>GPU load</span><span class="badge outline">${v.gpu > 60 ? 'Busy' : 'Cool'} · ${v.temp}°C</span></div>
@@ -406,16 +429,16 @@ function leoDetail() {
     <div class="grid2">
       ${cell(ICON.play, running, 'Tasks running', 'data-drawer="tasks"')}
       ${cell(ICON.bell, waiting, 'Waiting on you', 'data-pop="1"')}
-      ${cell(ICON.bolt, `${v.tps ? v.tps.toFixed(0) : 0}<small>tok/s</small>`, 'Generation speed')}
-      ${cell(ICON.chip, `${v.vram.toFixed(1)}<small>/ ${v.vramTotal} GB</small>`, 'VRAM in use')}
     </div>
+    ${vitalsBlock(v)}
     <div class="notes-head">${ICON.notes}Recent work</div>
     ${notesFor('leo')}`;
 }
 
 function toolDetail(id) {
-  const t = client.tools.find((x) => x.id === id);
-  if (!t) return '';
+  const found = client.tools.find((x) => x.id === id);
+  if (!found) return '';
+  const t = describe(found);
   const live = [...ui.liveCalls.values()].includes(id);
   const times = ui.callTimes.get(id) ?? [];
   const avg = times.length ? times.reduce((a, b) => a + b, 0) / times.length / 1000 : null;
@@ -437,12 +460,12 @@ function toolDetail(id) {
     metric = { label: 'Calls, last 12 hours', val: today, unit: '', d: before ? ((today - before) / before) * 100 : null, dl: 'vs the 12 before', badge: live ? 'Live' : 'Steady', values: h, warm: false };
   }
   return `
-    <div class="d-kicker">${ICON[id] ?? ICON.tool}<span>${esc(GROUPS[id] ?? 'Tool')}</span></div>
+    <div class="d-kicker">${ICON[id] ?? ICON.tool}<span>${esc(groupOf(id))}</span></div>
     <h2 class="d-title">${esc(t.name)}</h2>
     <p class="d-sub">${esc(t.desc)}</p>
     <div class="d-status">
       <div class="st-text"><span class="badge ${live ? '' : 'idle'}">${live ? 'In use now' : 'Ready'}</span><br>Last called <b>${agoLong(t.lastUsed)}</b></div>
-      <button class="explore" data-explore="${EXPLORE[id] ?? 'activity'}">Explore details ${ICON.chev}</button>
+      <button class="explore" data-explore="${EXPLORE[id] ?? 'tasks'}">Explore details ${ICON.chev}</button>
     </div>
     <div class="metric ${metric.warm ? '' : 'cool'}">
       <div class="metric-head"><span>${metric.label}</span><span class="badge outline">${metric.badge}</span></div>
@@ -456,13 +479,15 @@ function toolDetail(id) {
       ${cell(ICON.network, t.calls, 'Calls today')}
       ${cell(ICON.timer, avg ? `${avg.toFixed(1)}<small>s</small>` : '—', 'Average call time')}
       ${cell(ICON.clock, ago(t.lastUsed), 'Since last call')}
-      ${cell(ICON.skills, (SKILLS[id] ?? []).length, esc((SKILLS[id] ?? []).join(' and ')))}
+      ${cell(ICON.skills, skillsOf(id).length, esc(skillsOf(id).join(' and ')))}
     </div>
     <div class="notes-head">${ICON.notes}What ORION did with it</div>
     ${notesFor(id)}`;
 }
 
 $('#detail-body').addEventListener('click', (e) => {
+  const row = e.target.closest('[data-tool]');
+  if (row) { select(row.dataset.tool); haptic(6); return; }
   const x = e.target.closest('[data-explore],[data-drawer],[data-pop]');
   if (!x) return;
   if (x.dataset.explore) x.dataset.explore === 'business' ? go('business') : openDrawer(x.dataset.explore);
@@ -484,7 +509,9 @@ function setConvo(open) { ui.convoOpen = true; if (open) scrollToEnd(true); }
 function setPeek() {}
 
 function addUserMessage(m) {
-  if (ui.route !== 'chat') go('chat');
+  // another device's message shouldn't pull you off a dashboard page; it's in the conversation when you go back
+  if (ui.route !== 'chat' && !DASH.has(ui.route) && !ui.holdHome && !ui.quietSend) go('chat');
+  ui.quietSend = false;
   const el = document.createElement('div');
   el.className = 'msg user';
   if (m.voice) el.innerHTML = `<span class="voice-tag">${ICON.mic}said aloud</span><br>`;
@@ -492,9 +519,10 @@ function addUserMessage(m) {
   feedInner.append(el);
   const w = document.createElement('div');
   w.className = 'working';
-  w.innerHTML = '<span class="spin" aria-hidden="true"></span><span class="w-label">Thinking…</span>';
+  w.innerHTML = '<span class="lamps" aria-hidden="true"><i></i><i></i><i></i></span><span class="w-label">Thinking…</span>';
   feedInner.append(w);
-  ui.turn = { el: w, steps: [], tools: new Set() };
+  ui.turn = { el: w, steps: [], tools: new Set(), at: performance.now() };
+  orbit.look();
   const from = ui.flyFrom;
   ui.flyFrom = null;
   feed.scrollTop = feed.scrollHeight;
@@ -542,14 +570,18 @@ function upsertLeoMessage(m) {
     const tools = [...(turn?.tools ?? [])];
     const meta = steps.length
       ? `<button class="meta" aria-expanded="false">${steps.length} step${steps.length === 1 ? '' : 's'}${tools.length ? ` · ${esc(tools.slice(0, 2).join(', '))}${tools.length > 2 ? ` +${tools.length - 2}` : ''}` : ''}${ICON.chev}</button>`
-      : `<span class="meta">${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>`;
-    el.innerHTML = `<div class="msg-head"><span class="bracket" aria-hidden="true"></span><span class="who">ORION</span><span class="route" hidden></span>${meta}</div><div class="body"></div>${steps.length ? `<ul class="steps-list">${steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}`;
+      : '';
+    const at = new Date(m.at ?? Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+    el.innerHTML = `<div class="msg-head"><span class="who">ORION</span><span class="tok" hidden></span><span class="secs" hidden></span><span class="route" hidden></span>${meta}<time class="at">${at}</time></div><div class="body"></div>${steps.length ? `<ul class="steps-list">${steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}`;
     $('button.meta', el)?.addEventListener('click', (e) => e.currentTarget.setAttribute('aria-expanded', String(el.classList.toggle('open'))));
     ui.lastLeo?.classList.remove('live');
     el.classList.add('live');
     ui.lastLeo = el;
     feedInner.append(el);
     ui.messages.set(m.id, el);
+    // asked from the ORION page: he thought there on the big sphere; now his answer opens the conversation
+    if (ui.holdHome && m.id !== 'welcome') { ui.holdHome = false; if (ui.route === 'home') { go('chat'); requestAnimationFrame(() => scrollToEnd(true)); } }
+    el._sent = m.id !== 'welcome' ? turn?.at : undefined;
     const tier = ui.routes.get(m.id) ?? m.route?.tier ?? m.route ?? m.tier ?? (m.id !== 'welcome' ? ui.nextRoute : null);
     if (m.id !== 'welcome') ui.nextRoute = null;
     if (tier) tagRoute(el, tier);
@@ -559,7 +591,29 @@ function upsertLeoMessage(m) {
   if (m.streaming && grew > 0) orbit.talk(Math.min(1, 0.5 + grew / 24));
   el.classList.toggle('streaming', !!m.streaming);
   el.classList.toggle('interrupted', !!m.interrupted);
+  readouts(el, m);
   scrollToEnd();
+}
+
+/* Beside his name: tokens in green, seconds to answer in red. Uses the server's numbers when a
+   frame carries them (`tokens` / `usage`, `ms`), else counts tokens from the text (~4 chars each)
+   and times the reply here, from your send to his last word. */
+function readouts(el, m) {
+  if (m.id === 'welcome') return;
+  const real = m.tokens ?? m.usage?.output_tokens ?? m.usage?.total_tokens;
+  const tok = $('.tok', el);
+  const n = real ?? Math.max(1, Math.round(m.text.length / 4));
+  tok.hidden = false;
+  tok.textContent = `${real == null ? '~' : ''}${n.toLocaleString()} tok`;
+  tok.title = real == null ? 'Tokens, estimated from the reply' : 'Tokens';
+  if (m.streaming) return;
+  const ms = m.ms ?? (el._sent != null ? performance.now() - el._sent : null);
+  if (ms == null) return;
+  const s = ms / 1000;
+  const secs = $('.secs', el);
+  secs.hidden = false;
+  secs.textContent = `${s < 10 ? s.toFixed(1) : Math.round(s)}s`;
+  secs.title = 'Seconds from your message to his last word';
 }
 
 /* ---------- which brain answered: the `route` event (tier: local | haiku | sonnet) ---------- */
@@ -575,6 +629,7 @@ function tagRoute(el, tier) {
 }
 client.on('route', ({ tier, id }) => {
   if (!tier) return;
+  if (ui.turn || ACTIVE.has(ui.state)) orbit.setClaude(tier === 'haiku' || tier === 'sonnet');
   if (id && ui.messages.has(id)) return tagRoute(ui.messages.get(id), tier);
   if (id) return ui.routes.set(id, tier);
   // no id: the reply that's streaming now, or else the next one
@@ -647,8 +702,8 @@ function welcome() {
 /* ================================================================ */
 
 const STATS = [
-  { id: 'tps', label: 'Generation', icon: ICON.bolt, open: 'vitals' },
-  { id: 'gpu', label: 'GPU load', icon: ICON.chip, open: 'vitals' },
+  { id: 'tps', label: 'Generation', icon: ICON.bolt, open: 'tasks' },
+  { id: 'gpu', label: 'GPU load', icon: ICON.chip, open: 'tasks' },
   { id: 'tasks', label: 'Tasks running', icon: ICON.tasks, open: 'tasks' },
   { id: 'waiting', label: 'Waiting on you', icon: ICON.bell, open: 'approvals' },
 ];
@@ -765,7 +820,9 @@ form.addEventListener('submit', (e) => {
   sendText(text);
 });
 function sendText(text) {
-  if (ui.route !== 'chat') go('chat');
+  // from the ORION page you stay with him while he thinks; the conversation opens with his answer
+  if (ui.route === 'home') ui.holdHome = true;
+  else if (ui.route !== 'chat') go('chat');
   client.send(text);
 }
 const newTask = () => {
@@ -832,7 +889,7 @@ function commit(id) {
 }
 function refreshDecisionViews() {
   updateBadge(); renderApprovals(); renderStats(); renderSummaryFlag();
-  if (ui.drawerOpen && ui.panel === 'tasks') renderTasks();
+  if (tasksOpen()) renderTasks();
 }
 
 const undoBar = (id) => {
@@ -888,174 +945,6 @@ $('#pop-body').addEventListener('click', onDecisionClick);
 
 
 /* ================================================================ */
-/* view switch + flow view                                          */
-/* ================================================================ */
-
-$$('[data-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
-function setView(v) {
-  ui.view = v;
-  $$('[data-view]').forEach((b) => { const on = b.dataset.view === v; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
-  $('#flow').hidden = v !== 'flow';
-  $('#graph').style.visibility = v === 'flow' ? 'hidden' : '';
-  graph.paused = true;
-  ['#btn-zoom-in', '#btn-zoom-out', '#btn-fit'].forEach((s) => { $(s).disabled = v === 'flow'; $(s).style.opacity = v === 'flow' ? 0.4 : ''; });
-  if (v === 'flow') { renderFlow(); flowOrb.start(); } else flowOrb.stop();
-}
-$('#btn-zoom-in').addEventListener('click', () => graph.zoomBy(1.25));
-$('#btn-zoom-out').addEventListener('click', () => graph.zoomBy(0.8));
-$('#btn-fit').addEventListener('click', () => graph.fit());
-
-const FLOW_GROUPS = [
-  { id: 'running', label: 'Running now', icon: ICON.play },
-  { id: 'needs', label: 'Waiting on you', icon: ICON.bell },
-  { id: 'queued', label: 'Queued', icon: ICON.clock },
-  { id: 'done', label: 'Done today', icon: ICON.check },
-  { id: 'tools', label: 'Tools', icon: ICON.network },
-];
-
-function flowItems(g) {
-  const s = client.snapshot();
-  const task = (t) => ({
-    key: t.id, title: t.title, pill: ['Src', t.source.split(' ')[0]],
-    bars: t.status === 'done' ? 'ggg' : t.status === 'rejected' ? 'r--' : t.status === 'running' ? (t.progress > 0.6 ? 'gga' : t.progress > 0.3 ? 'ga-' : 'a--') : '---',
-    act: { drawer: 'tasks' },
-  });
-  if (g === 'running') return s.tasks.filter((t) => t.status === 'running').map(task);
-  if (g === 'queued') return s.tasks.filter((t) => t.status === 'queued').map(task);
-  if (g === 'done') return s.tasks.filter((t) => t.status === 'done' || t.status === 'rejected').sort((a, b) => b.updatedAt - a.updatedAt).map(task);
-  if (g === 'needs') return s.approvals.filter((a) => a.status === 'pending').map((a) => ({ key: a.id, title: a.title, pill: ['Src', a.source.split(' ')[0]], bars: 'rr-', act: { approval: a.id } }));
-  return [...s.tools].sort((a, b) => b.calls - a.calls).map((t) => ({
-    key: t.id, title: t.name, pill: ['Calls', t.calls],
-    bars: Date.now() - t.lastUsed < 120e3 ? 'ggg' : Date.now() - t.lastUsed < 30 * 60e3 ? 'gg-' : 'g--',
-    act: { tool: t.id },
-  }));
-}
-
-let flowQueued = false;
-function scheduleFlow() {
-  if (flowQueued) return;
-  flowQueued = true;
-  requestAnimationFrame(() => { flowQueued = false; if (ui.view === 'flow') renderFlow(); });
-}
-
-function renderFlow() {
-  const stage = $('#stage').getBoundingClientRect();
-  const W = stage.width, H = stage.height;
-  const wide = isWide();
-  const top = wide ? $('#topbar').offsetHeight + 10 : 10;
-  const bottom = wide ? $('#dock').offsetHeight + 30 + 52 : 20;
-  const left = wide ? 100 : 10;
-  const right = wide ? (ui.detailOpen ? 400 : 30) : 10;
-  const cy = top + (H - top - bottom) / 2;
-  ui.flowCy = cy;
-  const scale = Math.min(1, (W - left - right) / 860);
-  const ox = left + 150 * scale;
-  const chipX = ox + 200 * scale + 40;
-  const s = client.snapshot();
-  const counts = {
-    running: s.tasks.filter((t) => t.status === 'running').length,
-    needs: s.approvals.filter((a) => a.status === 'pending').length,
-    queued: s.tasks.filter((t) => t.status === 'queued').length,
-    done: s.tasks.filter((t) => t.status === 'done' || t.status === 'rejected').length,
-    tools: s.tools.length,
-  };
-  if (!ui.flowGroup) ui.flowGroup = counts.running ? 'running' : 'tools';
-
-  const orb = $('#flow-orb');
-  orb.style.left = `${ox}px`; orb.style.top = `${cy}px`;
-  orb.style.transform = `translate(-50%, -50%) scale(${Math.max(0.7, scale)})`;
-  $('#fo-model').textContent = client.vitals.model.split(' · ')[0];
-  $('#fo-queue').textContent = counts.queued + counts.running;
-  renderFlowState();
-
-  const chips = $('#flow-chips');
-  chips.style.left = `${chipX}px`; chips.style.top = `${cy}px`;
-  chips.innerHTML = FLOW_GROUPS.map((g) => `<button class="fchip ${g.id === ui.flowGroup ? 'on' : ''}" role="tab" aria-selected="${g.id === ui.flowGroup}" data-group="${g.id}"><span class="fc-top">${g.icon}<span class="fc-n">${counts[g.id]}</span></span><span class="fc-l">${g.label}</span></button>`).join('');
-
-  // items on an arc around ORION
-  const items = flowItems(ui.flowGroup).slice(0, 14);
-  const R = Math.max(chipX + 168 + 110 - ox, Math.min(W - right - 270 - ox, 560));
-  const availH = H - top - bottom - 30;
-  const n = items.length;
-  const spacing = Math.min(46, n > 1 ? availH / (n - 1) : 0);
-  const chipEls = $$('.fchip', chips);
-  const chipRects = chipEls.map((c) => c.getBoundingClientRect());
-  const selIdx = FLOW_GROUPS.findIndex((g) => g.id === ui.flowGroup);
-  const sr = chipRects[selIdx];
-  const sx = sr.right - stage.left, sy = sr.top + sr.height / 2 - stage.top;
-
-  let lines = '<defs><linearGradient id="fl" x1="0" x2="1"><stop offset="0" stop-color="rgba(245,230,195,0.85)"/><stop offset="1" stop-color="rgba(245,230,195,0.25)"/></linearGradient></defs>';
-  chipRects.forEach((r, i) => {
-    const x2 = r.left - stage.left, y2 = r.top + r.height / 2 - stage.top;
-    const x1 = ox + 95 * Math.max(0.7, scale), y1 = cy + 10;
-    lines += `<path d="M${x1},${y1} C${x1 + 60},${y1} ${x2 - 60},${y2} ${x2},${y2}" fill="none" stroke="${i === selIdx ? 'rgba(245,230,195,0.6)' : 'rgba(240,230,210,0.18)'}" stroke-width="1"/>`;
-  });
-  const BEADS = ['255,232,170', '255,255,255', '240,205,140', '255,255,255'];
-  const itemHtml = items.map((it, i) => {
-    const off = (i - (n - 1) / 2) * spacing;
-    const th = Math.asin(Math.max(-0.95, Math.min(0.95, off / R)));
-    const x = ox + Math.cos(th) * R, y = cy + off;
-    lines += `<path d="M${sx},${sy} C${sx + 90},${sy} ${x - 140},${y} ${x},${y}" fill="none" stroke="url(#fl)" stroke-width="1.1" opacity="${0.35 + 0.65 * (1 - Math.abs(off) / (availH / 2 + 1))}"/>`;
-    const glow = i < 4 ? BEADS[i] : '230,225,210';
-    lines += `<circle cx="${x}" cy="${y}" r="${i < 4 ? 3 : 2}" fill="rgb(${glow})"${i < 4 ? ` style="filter:drop-shadow(0 0 5px rgb(${glow}))"` : ''}/>`;
-    const far = Math.abs(off) > availH * 0.42;
-    return `<button class="fitem ${far ? 'far' : ''}" style="left:${x}px;top:${y}px" data-item="${i}"><span class="fi-t">${esc(it.title)}</span><span class="fi-m"><span class="mpill"><b>${esc(it.pill[0])}</b>${esc(String(it.pill[1]))}</span><span class="bars3">${[...it.bars].map((c) => `<i class="${c === '-' ? '' : c}"></i>`).join('')}</span></span></button>`;
-  }).join('');
-  $('#flow-lines').innerHTML = lines;
-  $('#flow-items').innerHTML = itemHtml || `<div class="flow-empty" style="left:${sx + 60}px;top:${sy}px">Nothing here right now.</div>`;
-  $('#flow-items').onclick = (e) => {
-    const b = e.target.closest('[data-item]');
-    if (!b) return;
-    const act = items[+b.dataset.item].act;
-    if (act.drawer) openDrawer(act.drawer);
-    else if (act.approval) { ui.expanded.add(act.approval); setPop(true); }
-    else if (act.tool) { setView('graph'); select(act.tool); }
-  };
-}
-$('#flow-chips').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-group]');
-  if (!b) return;
-  ui.flowGroup = b.dataset.group;
-  haptic(5);
-  renderFlow();
-});
-
-function renderFlowState() {
-  const st = ui.state;
-  const lit = st === 'needs-you' ? 'alert' : ACTIVE.has(st) ? 'on' : '';
-  const n = { idle: 1, listening: 2, thinking: 3, working: 4, speaking: 3, 'needs-you': 4 }[st] ?? 0;
-  $('#fo-state').innerHTML = Array.from({ length: 4 }, (_, i) => `<i class="${i < n ? lit || 'on' : ''}"></i>`).join('');
-}
-
-const flowOrb = {
-  raf: 0, level: 0, t: 0,
-  start() {
-    const cv = $('#flow-canvas');
-    const ctx = cv.getContext('2d');
-    let last = performance.now();
-    const fx = { glow: 0.7 };
-    const loop = (now) => {
-      this.t += (now - last) / 1000; last = now;
-      const dpr = Math.min(devicePixelRatio || 1, 2);
-      const W = cv.clientWidth, H = cv.clientHeight;
-      if (cv.width !== W * dpr) { cv.width = W * dpr; cv.height = H * dpr; }
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, W, H);
-      const st = ui.state;
-      drawHub(ctx, W / 2, H / 2, 36, this.t, {
-        halo: 0.55,
-        ...fx, think: st === 'thinking' ? 1 : st === 'working' ? 0.5 : 0, alert: st === 'needs-you' ? 1 : 0,
-        spin: ACTIVE.has(st) ? 1.6 : 1, level: this.level, still: matchMedia('(prefers-reduced-motion: reduce)').matches,
-      });
-      this.raf = requestAnimationFrame(loop);
-    };
-    cancelAnimationFrame(this.raf);
-    this.raf = requestAnimationFrame(loop);
-  },
-  stop() { cancelAnimationFrame(this.raf); },
-};
-
-/* ================================================================ */
 /* hands-free voice                                                 */
 /* ================================================================ */
 
@@ -1094,7 +983,7 @@ const voice = {
     $('#btn-voice').classList.remove('on');
     $('#btn-send').hidden = false; $('#btn-voice-end').hidden = true;
     $('#btn-voice').setAttribute('aria-label', 'Start hands-free voice');
-    graph.setLevel(0); orbit.setLevel(0); flowOrb.level = 0;
+    orbit.setLevel(0);
   },
 
   async openMic() {
@@ -1131,7 +1020,7 @@ const voice = {
       this.micLevel = this.micLevel * 0.7 + this.readMic() * 0.3;
       const speaking = client.state === 'speaking';
       const lvl = speaking ? this.leoAmp : this.micLevel;
-      if (client.state === 'listening') { graph.setLevel(this.micLevel); orbit.setLevel(this.micLevel * 0.6); flowOrb.level = this.micLevel; }
+      if (client.state === 'listening') orbit.setLevel(this.micLevel * 0.6);
       const bw = 4, gap = (W - bars.length * bw) / (bars.length - 1);
       bars.forEach((_, i) => {
         const shape = 1 - Math.abs(i - 4) / 5;
@@ -1216,37 +1105,27 @@ $('#btn-voice').addEventListener('click', () => (voice.on ? voice.stop() : voice
 $('#btn-voice-end').addEventListener('click', () => voice.stop());
 
 /* ================================================================ */
-/* phone: expand the map header                                     */
-/* ================================================================ */
-
-$('#btn-map').addEventListener('click', () => {
-  const full = body.classList.toggle('map-full');
-  $('#btn-map').setAttribute('aria-pressed', String(full));
-  $('#btn-map').setAttribute('aria-label', full ? 'Shrink map' : 'Expand map');
-  graph.userMoved = false;
-});
-
-/* ================================================================ */
 /* dashboards drawer                                                */
 /* ================================================================ */
 
 const drawer = $('#drawer');
-const PANELS = ['activity', 'tasks', 'watch', 'vitals'];
-const TITLES = { activity: 'Activity', tasks: 'Tasks', watch: 'Watching', vitals: 'Vitals' };
 
-function openDrawer(panel = ui.panel) {
-  selectPanel(panel);
+/* The drawer is ORION's task board, full screen: Always, Daily and Scheduled. */
+function openDrawer() {
+  ui.panel = 'tasks';
   ui.drawerOpen = true;
-  $$('[data-open]').forEach((b) => b.classList.toggle('on', b.dataset.open === ui.panel));
+  $$('[data-open]').forEach((b) => b.classList.add('on'));
   drawer.classList.add('open');
   drawer.setAttribute('aria-hidden', 'false');
   $('#scrim').classList.add('on');
   setPop(false);
+  renderTasks();
   haptic(6);
   setTimeout(() => $('#btn-drawer-close').focus({ preventScroll: true }), 50);
 }
 function closeDrawer() {
   ui.drawerOpen = false;
+  ui.watchResult = '';
   $$('[data-open]').forEach((b) => b.classList.remove('on'));
   drawer.classList.remove('open');
   drawer.setAttribute('aria-hidden', 'true');
@@ -1257,141 +1136,182 @@ $('#btn-drawer-close').addEventListener('click', closeDrawer);
 $('#scrim').addEventListener('click', () => { if (ui.drawerOpen) closeDrawer(); else setDetail(false); });
 addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (ui.popOpen) setPop(false);
+  if (!$('#tk-ask').hidden) closeAsk();
+  else if (ui.popOpen) setPop(false);
   else if (ui.drawerOpen) closeDrawer();
   else if (ui.detailOpen) setDetail(false);
   else if (ui.route === 'chat' && document.activeElement !== input) go('home');
   else if (ui.route === 'chat') input.blur();
 });
+const tasksOpen = () => ui.drawerOpen;
 
-function selectPanel(p) {
-  if (p !== ui.panel || !ui.drawerOpen) ui.watchResult = '';
-  ui.panel = p;
-  $('#drawer-title').textContent = TITLES[p];
-  $$('#segmented [role=tab]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.panel === p)));
-  $('#seg-thumb').style.transform = `translateX(${PANELS.indexOf(p) * 100}%)`;
-  $$('.panel').forEach((el) => { el.hidden = el.dataset.panel !== p; });
-  renderPanel();
-}
-$('#segmented').addEventListener('click', (e) => { const p = e.target.closest('[data-panel]')?.dataset.panel; if (p) selectPanel(p); });
-
-function renderPanel() {
-  ({ activity: renderActivity, tasks: renderTasks, watch: renderWatch, vitals: renderVitals })[ui.panel]();
-}
-
-function renderActivity() {
-  const s = client.snapshot();
-  const busy = ACTIVE.has(s.state);
-  $('#panel-activity').innerHTML = `
-    <div class="now-card">
-      <span class="sphere hub" aria-hidden="true"></span>
-      <div><div class="t1">${esc(ui.stateLabel)}</div><div class="t2">${esc(ui.stateDetail || (busy ? 'Working…' : 'Waiting for the next job'))}</div></div>
-    </div>
-    <div class="group">
-      ${[...s.activity].sort((a, b) => b.at - a.at).slice(0, 40).map((a, i) => `
-        <div class="tl-item k-${a.kind} ${i === 0 && busy ? 'now' : ''}">
-          <span class="tl-icon">${ICON[a.kind] ?? ICON.tool}</span>
-          <div><div class="tl-title">${esc(a.title)}</div>${a.detail ? `<div class="tl-detail">${esc(a.detail)}</div>` : ''}</div>
-          <span class="tl-time">${ago(a.at)}</span>
-        </div>`).join('')}
-    </div>`;
-}
-
-/* ---------- Watching: the heartbeat checklist (ACCOUNTS.md §4) ---------- */
-// ORION checks each line every few minutes and pings you when one comes true. The chat
-// ("let me know if…") and this panel edit the same list; every change comes back as `watch`.
-const WATCH_MAX = 25;
+/* ---------- Tasks ---------- */
+// Three kinds. Always: things ORION keeps checking (the watch list, ACCOUNTS.md §4).
+// Daily: his routines (task ids routine_<name>). Scheduled: dated things on a calendar
+// (timers, and any task carrying a `due` / `next` time). New tasks are described in plain
+// words and sent to ORION with a short note of which kind they are; he files them himself.
 const isHeartbeat = (a) => a.kind === 'think' && /heartbeat/i.test(a.title ?? '');
+const isRoutine = (t) => /^routine_/.test(t.id ?? '');
+const whenOf = (t) => t.due ?? t.next ?? t.at ?? null;
+const isDated = (t) => !isRoutine(t) && (/^timer_/.test(t.id ?? '') || (t.due ?? t.next) != null) && t.status !== 'done' && t.status !== 'rejected';
 let watchWait = 0;
-function renderWatch() {
-  const el = $('#panel-watch');
-  const s = client.snapshot();
-  const w = s.watch ?? { items: [] };
-  const items = [...(w.items ?? [])].sort((a, b) => (a.n ?? 0) - (b.n ?? 0));
-  const alerts = s.activity.filter(isHeartbeat).sort((a, b) => b.at - a.at).slice(0, 8);
-  const off = account()?.features?.watch === false;
-  const draft = el.querySelector('#watch-in')?.value ?? '';
-  const focused = document.activeElement?.id === 'watch-in';
-  const full = items.length >= WATCH_MAX;
-  el.innerHTML = off ? '<div class="empty">Watching isn’t on for this account.</div>' : `
-    <form class="watch-add" id="watch-add" autocomplete="off">
-      <label class="sr-only" for="watch-in">Something for ORION to keep an eye on</label>
-      <input id="watch-in" maxlength="200" placeholder="${full ? 'The list is full' : 'Tell me if…'}" ${full || ui.watchBusy ? 'disabled' : ''} enterkeyhint="done">
-      <button class="btn primary" type="submit" ${ui.watchBusy ? 'disabled' : ''}>${ui.watchBusy ? 'Adding' : 'Add'}</button>
-    </form>
-    ${ui.watchResult ? `<p class="watch-result">${esc(ui.watchResult)}</p>` : ''}
-    <div class="group watch-list">${items.length ? items.map((it) => `
-      <div class="watch-item${ui.watchGoing.has(it.id) ? ' going' : ''}">
-        <span class="watch-n">${String(it.n ?? '').padStart(2, '0')}</span>
-        <span class="watch-t">${esc(it.text)}</span>
-        <button class="watch-x" data-unwatch="${esc(it.id)}" aria-label="Stop watching: ${esc(it.text)}">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>
-        </button>
-      </div>`).join('') : '<div class="empty watch-empty">Nothing on the list. Tell ORION what to keep an eye on, here or in chat.</div>'}
-    </div>
-    <p class="watch-meta">Checked every ${w.every_minutes ?? 30} minutes · ${items.length} of ${WATCH_MAX}</p>
-    ${alerts.length ? `<h3 class="watch-h">Alerts</h3>
-    <div class="group">${alerts.map((a) => `
-      <div class="tl-item k-think">
-        <span class="tl-icon">${ICON.think}</span>
-        <div><div class="tl-title">${esc(a.detail || a.title)}</div></div>
-        <span class="tl-time">${ago(a.at)}</span>
-      </div>`).join('')}</div>` : ''}`;
-  const inp = el.querySelector('#watch-in');
-  if (inp) { inp.value = draft; if (focused) inp.focus({ preventScroll: true }); }
-}
 ui.watchGoing = new Set();
-$('#panel-watch').addEventListener('submit', (e) => {
-  e.preventDefault();
-  const inp = $('#watch-in');
-  const text = inp?.value.trim();
-  if (!text || ui.watchBusy) return;
-  ui.watchBusy = true; ui.watchResult = '';
-  client.watchAdd(text);
-  inp.value = '';
-  clearTimeout(watchWait);
-  watchWait = setTimeout(() => { ui.watchBusy = false; ui.watchResult = 'No answer from ORION yet. It may still be added.'; renderWatch(); }, 10000);
-  renderWatch();
-});
-$('#panel-watch').addEventListener('click', (e) => {
+ui.tab = 'always';
+const today0 = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
+ui.cal = { y: new Date().getFullYear(), m: new Date().getMonth(), sel: +today0() };
+
+const clockAt = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+const dayKey = (ms) => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return +d; };
+const longDay = (ms) => new Date(ms).toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' });
+const isoDay = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+const TABS = ['always', 'daily', 'scheduled'];
+function setTab(t) {
+  ui.tab = t;
+  $$('#tk-tabs [role=tab]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === t)));
+  $('#tk-thumb').style.transform = `translateX(${TABS.indexOf(t) * 100}%)`;
+  renderTasks();
+  $('#drawer-body').scrollTop = 0;
+}
+$('#tk-tabs').addEventListener('click', (e) => { const t = e.target.closest('[data-tab]')?.dataset.tab; if (t) { setTab(t); haptic(4); } });
+
+const newBtn = (label) => `<button type="button" class="tk-new" data-new>${label}</button>`;
+const rowX = (id, label) => `<button class="tk-x" data-unwatch="${esc(id)}" aria-label="Remove: ${esc(label)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg></button>`;
+
+function renderTasks() {
+  const el = $('#panel-tasks');
+  if (!el) return;
+  const s = client.snapshot();
+  const running = s.tasks.filter((t) => t.status === 'running' && !isRoutine(t));
+  const now = running.length
+    ? `<div class="tk-now"><span class="tk-live" aria-hidden="true"></span><span class="tk-now-t">${esc(running[0].title)}</span><span class="tk-now-p">${Math.round((running[0].progress || 0) * 100)}%</span>${running.length > 1 ? `<span class="tk-now-more">+${running.length - 1}</span>` : ''}</div>`
+    : '';
+  let body = '';
+
+  if (ui.tab === 'always') {
+    const items = [...(s.watch?.items ?? [])].sort((a, b) => (a.n ?? 0) - (b.n ?? 0));
+    const hits = s.activity.filter(isHeartbeat).sort((a, b) => b.at - a.at).slice(0, 3);
+    body = `
+      <div class="tk-list">${items.length ? items.map((it) => `
+        <div class="tk-item${ui.watchGoing.has(it.id) ? ' going' : ''}"><span class="tk-t">${esc(it.text)}</span>${rowX(it.id, it.text)}</div>`).join('')
+        : '<p class="tk-empty">Nothing yet.</p>'}
+      </div>
+      ${newBtn('New always task')}
+      ${hits.length ? `<h3 class="tk-sub">Recent</h3><div class="tk-list">${hits.map((a) => `
+        <div class="tk-item quiet"><span class="tk-t">${esc(a.detail || a.title)}</span><time>${ago(a.at)}</time></div>`).join('')}</div>` : ''}`;
+  }
+
+  if (ui.tab === 'daily') {
+    const daily = s.tasks.filter(isRoutine).sort((a, b) => (whenOf(a) ?? 0) % 864e5 - (whenOf(b) ?? 0) % 864e5);
+    body = `
+      <div class="tk-list">${daily.length ? daily.map((t) => `
+        <div class="tk-item"><span class="tk-time">${whenOf(t) ? clockAt(whenOf(t)) : '—'}</span><span class="tk-t">${esc(t.title)}${t.every && !/day/i.test(t.every) ? `<small>every ${esc(t.every)}</small>` : ''}</span></div>`).join('')
+        : '<p class="tk-empty">Nothing yet.</p>'}
+      </div>
+      ${newBtn('New daily task')}`;
+  }
+
+  if (ui.tab === 'scheduled') {
+    const dated = s.tasks.filter(isDated).filter((t) => whenOf(t));
+    const byDay = new Map();
+    dated.forEach((t) => { const k = dayKey(whenOf(t)); byDay.set(k, [...(byDay.get(k) ?? []), t]); });
+    const { y, m, sel } = ui.cal;
+    const first = new Date(y, m, 1);
+    const lead = (first.getDay() + 6) % 7;                    // weeks start on Monday
+    const days = new Date(y, m + 1, 0).getDate();
+    const t0 = +today0();
+    let cells = '';
+    for (let i = 0; i < lead; i++) cells += '<span class="cal-c pad"></span>';
+    for (let d = 1; d <= days; d++) {
+      const k = +new Date(y, m, d);
+      const n = byDay.get(k)?.length ?? 0;
+      cells += `<button type="button" class="cal-c${k === t0 ? ' today' : ''}${k === sel ? ' sel' : ''}${k < t0 ? ' past' : ''}" data-day="${k}" aria-label="${longDay(k)}${n ? `, ${n} scheduled` : ''}" aria-pressed="${k === sel}">${d}${n ? '<i></i>' : ''}</button>`;
+    }
+    const onDay = (byDay.get(sel) ?? []).sort((a, b) => whenOf(a) - whenOf(b));
+    const upcoming = dated.filter((t) => whenOf(t) >= t0 && dayKey(whenOf(t)) !== sel).sort((a, b) => whenOf(a) - whenOf(b)).slice(0, 5);
+    const row = (t, withDay) => `<div class="tk-item"><span class="tk-time">${withDay ? new Date(whenOf(t)).toLocaleDateString([], { day: 'numeric', month: 'short' }) : clockAt(whenOf(t))}</span><span class="tk-t">${esc(t.title)}</span></div>`;
+    body = `
+      <div class="cal">
+        <div class="cal-head">
+          <button type="button" class="cal-nav" data-cal="-1" aria-label="Previous month"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 6-6 6 6 6"/></svg></button>
+          <span class="cal-m">${first.toLocaleDateString([], { month: 'long', year: 'numeric' })}</span>
+          <button type="button" class="cal-nav" data-cal="1" aria-label="Next month"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 6 6 6-6 6"/></svg></button>
+        </div>
+        <div class="cal-w" aria-hidden="true"><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span></div>
+        <div class="cal-g">${cells}</div>
+      </div>
+      <h3 class="tk-sub">${sel === t0 ? 'Today' : longDay(sel)}</h3>
+      <div class="tk-list">${onDay.length ? onDay.map((t) => row(t, false)).join('') : '<p class="tk-empty">Nothing on this day.</p>'}</div>
+      ${newBtn(`New task on ${new Date(sel).toLocaleDateString([], { day: 'numeric', month: 'short' })}`)}
+      ${upcoming.length ? `<h3 class="tk-sub">Coming up</h3><div class="tk-list">${upcoming.map((t) => row(t, true)).join('')}</div>` : ''}`;
+  }
+
+  el.innerHTML = `<div class="tk-wrap">${now}${body}</div>`;
+}
+
+$('#panel-tasks').addEventListener('click', (e) => {
+  if (e.target.closest('[data-new]')) return openAsk(ui.tab);
+  const nav = e.target.closest('[data-cal]');
+  if (nav) {
+    const d = new Date(ui.cal.y, ui.cal.m + Number(nav.dataset.cal), 1);
+    ui.cal.y = d.getFullYear(); ui.cal.m = d.getMonth();
+    return renderTasks();
+  }
+  const day = e.target.closest('[data-day]');
+  if (day) { ui.cal.sel = Number(day.dataset.day); haptic(4); return renderTasks(); }
   const x = e.target.closest('[data-unwatch]');
-  if (!x) return;
-  ui.watchGoing.add(x.dataset.unwatch);
-  client.watchRemove(x.dataset.unwatch);
-  renderWatch();
+  if (x) { ui.watchGoing.add(x.dataset.unwatch); client.watchRemove(x.dataset.unwatch); renderTasks(); }
 });
 client.on('watch', (w) => {
   clearTimeout(watchWait);
-  ui.watchBusy = false;
   ui.watchGoing = new Set([...ui.watchGoing].filter((id) => w.items?.some((it) => it.id === id)));
-  if (w.result) ui.watchResult = w.result;
-  if (ui.drawerOpen && ui.panel === 'watch') renderWatch();
+  if (tasksOpen()) renderTasks();
 });
 
-function renderTasks() {
-  const s = client.snapshot();
-  const cols = [['needs-you', 'Needs you'], ['running', 'Running'], ['queued', 'Queued'], ['done', 'Done']];
-  const byStatus = (st) => s.tasks.filter((t) => (st === 'done' ? t.status === 'done' || t.status === 'rejected' : t.status === st)).sort((a, b) => b.updatedAt - a.updatedAt);
-  $('#panel-tasks').innerHTML = `<div class="board">${cols.map(([key, name]) => {
-    const all = byStatus(key);
-    const list = all.slice(0, key === 'done' ? 8 : 20);
-    return `<section class="col ${key}">
-      <div class="col-head"><span class="dot"></span>${name}<span class="count">${all.length}</span></div>
-      <div class="col-cards">${list.length ? list.map((t) => taskCard(t, s)).join('') : `<div class="empty">${key === 'needs-you' ? 'Nothing waiting on you' : 'Empty'}</div>`}</div>
-    </section>`;
-  }).join('')}</div>`;
+/* ---------- Describe your task ---------- */
+const KINDS = {
+  always: { kind: 'Always', place: 'Tell me if a Ciel order hasn’t shipped in 3 days',
+    note: () => '[New task · Always: keep checking this and tell me when it happens]' },
+  daily: { kind: 'Daily', place: 'Every morning at 7, sum up last night’s orders',
+    note: () => '[New task · Daily: do this every day]' },
+  scheduled: { kind: 'Scheduled', place: 'Remind me to order winter samples',
+    note: (day) => `[New task · Scheduled for ${new Date(day).toLocaleDateString('en-US', { weekday: 'long' })} ${isoDay(day)}]` },
+};
+const ask = $('#tk-ask'), askIn = $('#tk-ask-in');
+function openAsk(tab) {
+  const a = KINDS[tab];
+  ui.askTab = tab;
+  ui.askDay = ui.cal.sel;
+  $('#tk-ask-kind').textContent = tab === 'scheduled' ? `${a.kind} · ${longDay(ui.askDay)}` : a.kind;
+  askIn.placeholder = a.place;
+  askIn.value = '';
+  $('#tk-ask-hint').textContent = 'Enter to send';
+  ask.classList.remove('sent');
+  ask.hidden = false;
+  requestAnimationFrame(() => { ask.classList.add('on'); askIn.focus(); });
+  haptic(6);
 }
-
-function taskCard(t, s) {
-  const ap = s.approvals.find((a) => a.id === t.id && a.status === 'pending');
-  return `<div class="task ${t.status}">
-    <div class="t-title">${esc(t.title)}</div>
-    <div class="t-meta">${esc(t.source)}${t.status === 'rejected' ? ' · rejected' : ''} · ${ago(t.updatedAt)}</div>
-    ${t.status === 'running' ? `<div class="bar"><span style="width:${Math.round((t.progress || 0) * 100)}%"></span></div>` : ''}
-    ${ap ? (ui.decisions.has(ap.id) ? undoBar(ap.id) : `<div class="t-actions"><button class="btn secondary" data-reject="${ap.id}">Reject</button><button class="btn primary" data-approve="${ap.id}">Approve</button></div>`) : ''}
-  </div>`;
+function closeAsk() {
+  ask.classList.remove('on');
+  setTimeout(() => { if (!ask.classList.contains('on')) ask.hidden = true; }, 220);
 }
-$('#panel-tasks').addEventListener('click', onDecisionClick);
+function sendAsk() {
+  const text = askIn.value.trim();
+  if (!text) return askIn.focus();
+  // the request goes out as a normal message; stay here instead of jumping to the conversation
+  ui.quietSend = true;
+  client.send(`${KINDS[ui.askTab].note(ui.askDay)} ${text}`);
+  ask.classList.add('sent');
+  $('#tk-ask-hint').textContent = 'Sent to ORION';
+  haptic(10);
+  setTimeout(closeAsk, 700);
+}
+$('#tk-ask-form').addEventListener('submit', (e) => { e.preventDefault(); sendAsk(); });
+askIn.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendAsk(); }
+  if (e.key === 'Escape') { e.stopPropagation(); closeAsk(); }
+});
+ask.addEventListener('click', (e) => { if (e.target === ask || e.target.closest('[data-ask-cancel]')) closeAsk(); });
 
 function sparkline(values, { w = 140, h = 30 } = {}) {
   const max = Math.max(...values, 1), min = Math.min(...values, 0);
@@ -1404,58 +1324,44 @@ function sparkline(values, { w = 140, h = 30 } = {}) {
   </svg>`;
 }
 
-$('#drawer-body').addEventListener('scroll', () => { $('#tooltip').hidden = true; }, { passive: true });
-
-function gauge(id, label) {
+/* ---------- Vitals, inside ORION's panel ---------- */
+function gauge(label, frac, val, sub) {
   const C = 2 * Math.PI * 30;
+  const off = C * (1 - Math.max(0, Math.min(1, frac)));
   return `<div class="gauge">
     <svg viewBox="0 0 76 76" aria-hidden="true">
       <circle class="g-track" cx="38" cy="38" r="30" fill="none"/>
-      <circle class="g-fill" id="g-${id}" cx="38" cy="38" r="30" fill="none" stroke-dasharray="${C}" stroke-dashoffset="${C}" transform="rotate(-90 38 38)"/>
-      <text class="g-val" id="gv-${id}" x="38" y="43" text-anchor="middle">—</text>
+      <circle class="g-fill" cx="38" cy="38" r="30" fill="none" stroke-dasharray="${C.toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}" transform="rotate(-90 38 38)"/>
     </svg>
-    <div class="g-label">${label}</div><div class="g-sub" id="gs-${id}"></div>
+    <span class="g-num">${val}</span>
+    <div class="g-label">${label}</div><div class="g-sub">${sub}</div>
   </div>`;
 }
-
-function renderVitals() {
-  const v = client.snapshot().vitals;
-  $('#panel-vitals').innerHTML = `
-    <div class="gauges">${gauge('gpu', 'GPU')}${gauge('vram', 'VRAM')}${gauge('temp', 'Temp')}</div>
+function vitalsBlock(v) {
+  const tools = client.snapshot().tools.map(describe);
+  return `
+    <div class="notes-head">${ICON.chip}Vitals</div>
+    <div class="gauges">
+      ${gauge('VRAM', v.vram / v.vramTotal, v.vram.toFixed(1), `of ${v.vramTotal} GB`)}
+      ${gauge('Temp', (v.temp - 30) / 55, `${v.temp}°`, 'celsius')}
+      ${gauge('Speed', (v.tps || 0) / 80, (v.tps || 0).toFixed(0), 'tok/s')}
+    </div>
     <div class="chart-card">
-      <div class="c-title" id="tps-now">— tokens/sec</div>
+      <div class="c-title">${(v.tps || 0).toFixed(1)} tokens/sec</div>
       <div class="c-sub">Generation speed, last 60 seconds</div>
-      <div id="tps-spark"></div>
+      ${sparkline(ui.tpsHistory, { w: 300, h: 56 }).replace('class="spark"', 'class="spark" style="height:56px"')}
     </div>
     <div class="group rows">
-      <div class="row"><span>GPU</span><span class="v">RTX 2070 · 8 GB</span></div>
       <div class="row"><span>Model</span><span class="v">${esc(v.model)}</span></div>
-      <div class="row"><span>Uptime</span><span class="v" id="vit-uptime"></span></div>
-      <div class="row"><span>Tasks queued</span><span class="v" id="vit-queue"></span></div>
-      <div class="row"><span>Voice</span><span class="v">Whisper + Kokoro on CPU</span></div>
+      <div class="row"><span>Uptime</span><span class="v">${uptime(v.uptime)} ${Math.floor((v.uptime % 3600) / 60)}m</span></div>
+      <div class="row"><span>Queue</span><span class="v">${v.queue}</span></div>
+      <div class="row"><span>Voice</span><span class="v">Whisper + Kokoro</span></div>
       <div class="row"><span>Connection</span><span class="v">${client.mode === 'mock' ? 'Demo data' : 'Tailscale'}</span></div>
     </div>
+    <div class="notes-head">${ICON.tool}Tools</div>
     <div class="group rows">
-      ${[...client.snapshot().tools].sort((a, b) => b.lastUsed - a.lastUsed).map((t) => `<div class="row"><span>${esc(t.name)}</span><span class="v">${t.calls} calls · ${ago(t.lastUsed)}</span></div>`).join('')}
+      ${tools.map((t) => `<button type="button" class="row tool-row" data-tool="${esc(t.id)}"><span>${ICON[t.id] ?? ICON.tool}${esc(t.name)}</span><span class="v">${t.calls ?? 0} calls${t.lastUsed ? ` · ${ago(t.lastUsed)}` : ''}</span></button>`).join('')}
     </div>`;
-  updateVitals(v);
-}
-
-function updateVitals(v) {
-  if (!$('#g-gpu')) return;
-  const C = 2 * Math.PI * 30;
-  const set = (id, frac, val, sub) => {
-    $(`#g-${id}`).style.strokeDashoffset = String(C * (1 - Math.max(0, Math.min(1, frac))));
-    $(`#gv-${id}`).textContent = val;
-    $(`#gs-${id}`).textContent = sub;
-  };
-  set('gpu', v.gpu / 100, `${v.gpu}%`, 'load');
-  set('vram', v.vram / v.vramTotal, v.vram.toFixed(1), `of ${v.vramTotal} GB`);
-  set('temp', (v.temp - 30) / 55, `${v.temp}°`, 'celsius');
-  $('#tps-now').textContent = `${v.tps.toFixed(1)} tokens/sec`;
-  $('#tps-spark').innerHTML = sparkline(ui.tpsHistory, { w: 300, h: 60 }).replace('class="spark"', 'class="spark" style="height:60px"');
-  $('#vit-uptime').textContent = `${uptime(v.uptime)} ${Math.floor((v.uptime % 3600) / 60)}m`;
-  $('#vit-queue').textContent = v.queue;
 }
 
 /* ================================================================ */
@@ -1505,7 +1411,7 @@ function showBanner(n) {
     if (moved < 6) {
       dismiss();
       if (n.target?.approvalId) { ui.expanded.add(n.target.approvalId); setPop(true); }
-      else openDrawer(n.target?.panel ?? 'activity');
+      else openDrawer();
       return;
     }
     if (y + project(vel) < -40) dismiss(vel);
@@ -1517,11 +1423,14 @@ function showBanner(n) {
 /* pages: ORION, the conversation, the business                      */
 /* ================================================================ */
 
-const ROUTES = { '#/chat': 'chat', '#/business': 'business' };
-const HASH = { home: '#/', chat: '#/chat', business: '#/business' };
+const ROUTES = { '#/chat': 'chat', '#/business': 'business', '#/admin': 'admin' };
+const HASH = { home: '#/', chat: '#/chat', business: '#/business', admin: '#/admin' };
+const DASH = new Set(['business', 'admin']);      // full pages over the shader backdrop
 const biz = mountBusiness($('#biz'), { getMetrics: () => client.snapshot().metrics, tooltip: $('#tooltip') });
+const adm = mountAdmin($('#adm'), { client, onTokenCopied: () => haptic(6) });
 $('#summary').hidden = false;
 $('#biz').hidden = false;
+$('#adm').hidden = false;
 
 function go(r) {
   if (location.hash !== HASH[r] && !(r === 'home' && !location.hash)) history.pushState(null, '', HASH[r]);
@@ -1530,10 +1439,12 @@ function go(r) {
 
 function applyRoute() {
   let r = ROUTES[location.hash] ?? 'home';
-  if (r === 'business' && !canAct()) { history.replaceState(null, '', HASH.home); r = 'home'; }
+  if ((r === 'business' && !canAct()) || (r === 'admin' && !canAdmin())) { history.replaceState(null, '', HASH.home); r = 'home'; }
   const prev = ui.route;
   ui.route = r;
-  ['home', 'chat', 'business'].forEach((k) => body.classList.toggle(k, k === r));
+  ['home', 'chat', 'business', 'admin'].forEach((k) => body.classList.toggle(k, k === r));
+  body.classList.toggle('dash', DASH.has(r));
+  setBackdrop(DASH.has(r), $('#shader'));
   $$('[data-route]').forEach((a) => {
     const on = a.dataset.route === r;
     a.classList.toggle('on', on);
@@ -1541,15 +1452,16 @@ function applyRoute() {
   });
   if (r === prev) return layout();
   $('#tooltip').hidden = true;
-  if (r === 'chat' && ui.view === 'flow') setView('graph');
-  if (r !== 'home' && ui.view === 'flow') setView('graph');
-  if (r === 'business') { setDetail(false); setPop(false); biz.render(); $('#biz').scrollTop = 0; }
-  graph.paused = true;                    // the rings (orbit.js) stand in for the network now
-  orbit.paused = r === 'business';
+  if (r !== 'home') { setSummary(false); ui.holdHome = false; }
+  if (DASH.has(r)) { setDetail(false); setPop(false); }
+  if (r === 'business') { biz.render(); $('#biz').scrollTop = 0; }
+  if (r === 'admin') { adm.open(); $('#adm').scrollTop = 0; }
+  else if (prev === 'admin') adm.close();
+  orbit.paused = DASH.has(r);
   if (r === 'chat') enterChat(prev == null);
   else if (prev === 'chat') feedInner.classList.remove('entering');
   if (ui.drawerOpen && !isWide()) closeDrawer();
-  document.title = r === 'business' ? 'Ciel · ORION' : r === 'chat' ? 'Conversation · ORION' : 'ORION';
+  document.title = r === 'business' ? 'Ciel · ORION' : r === 'admin' ? 'Admin · ORION' : r === 'chat' ? 'Conversation · ORION' : 'ORION';
   layout();
   if (prev != null) haptic(5);
 }
@@ -1608,6 +1520,34 @@ function briefHTML(b) {
   return paras.map((p) => `<p>${esc(p)}</p>`).join('');
 }
 
+/* The brief lives behind a pill under the top bar. Its lamp is lit while there's something you haven't read. */
+const SEEN_KEY = 'orion-brief-seen';
+const seenAt = () => { try { return +localStorage.getItem(SEEN_KEY) || 0; } catch { return 0; } };
+function setSummary(open) {
+  ui.sumOpen = open && ui.route === 'home';
+  body.classList.toggle('sum-open', ui.sumOpen);
+  $('#sum-pill').setAttribute('aria-expanded', String(ui.sumOpen));
+  if (ui.sumOpen) {
+    const at = client.brief?.at;
+    if (at) try { localStorage.setItem(SEEN_KEY, String(at)); } catch {}
+    renderPill();
+  }
+}
+function renderPill() {
+  const b = client.brief;
+  const fresh = b?.at && b.at > seenAt();
+  const waiting = canAct() ? waitingCount() : 0;
+  const pill = $('#sum-pill');
+  pill.classList.toggle('lit', !!(fresh || waiting));
+  pill.classList.toggle('busy', !!ui.briefWaiting && !b);
+  $('#sum-pill-t').textContent = b?.at ? ago(b.at) : '';
+}
+$('#sum-pill').addEventListener('click', () => { setSummary(!ui.sumOpen); haptic(6); });
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && ui.sumOpen) { setSummary(false); $('#sum-pill').focus(); } });
+addEventListener('pointerdown', (e) => {
+  if (ui.sumOpen && !e.target.closest('#summary, #sum-pill')) setSummary(false);
+}, true);
+
 function renderSummary() {
   const s = client.snapshot();
   const b = s.brief?.text ? s.brief : null;
@@ -1626,7 +1566,7 @@ function renderSummary() {
     <p class="sum-flag" id="sum-flag"></p>
     <div class="sum-ask"><span>${h < 12 ? 'This morning, ask me' : 'Ask me'}</span>${(canAct() ? ASK : ASK_GUEST).map(([say, label]) => `<button data-say="${esc(say)}">${esc(label)}</button>`).join('')}</div>`;
   renderSummaryFlag();
-  layout();
+  renderPill();
 }
 function renderSummaryFlag() {
   const el = $('#sum-flag');
@@ -1634,36 +1574,29 @@ function renderSummaryFlag() {
   const n = canAct() ? waitingCount() : 0;
   el.hidden = !n;
   el.innerHTML = n ? `<button data-sum="approvals">${n === 1 ? 'One approval is' : `${n} approvals are`} waiting for you</button>` : '';
-  placeSummary();
+  renderPill();
 }
-function placeSummary() {
-  const el = $('#summary');
-  if (!isWide() || !el.offsetHeight) return;
-  const topH = $('#topbar').offsetHeight, dockH = $('#dock').offsetHeight;
-  const lo = topH + 16, hi = innerHeight - dockH - 40 - el.offsetHeight;
-  const mid = (topH + innerHeight - dockH - 30) / 2 - el.offsetHeight / 2;
-  el.style.setProperty('--sum-top', `${Math.round(Math.max(lo, Math.min(hi, mid)))}px`);
-}
+function placeSummary() {}             // the panel hangs from its pill now; kept for older callers
 $('#summary').addEventListener('click', (e) => {
   const say = e.target.closest('[data-say]');
   if (say) {
     const r = say.getBoundingClientRect();
     ui.flyFrom = { left: r.left + 20, top: r.top };
+    setSummary(false);
     return sendText(say.dataset.say);
   }
-  if (e.target.closest('[data-sum=approvals]')) setPop(true);
+  if (e.target.closest('[data-sum=approvals]')) { setSummary(false); setPop(true); }
 });
 
 /* ================================================================ */
 /* go                                                               */
 /* ================================================================ */
 
-selectPanel('activity');
 autosize();
 applyRoute();
 client.connect();
 setInterval(() => {
-  if (ui.drawerOpen && ui.panel === 'activity') renderActivity();
+  if (tasksOpen()) renderTasks();
   if (ui.popOpen && !ui.decisions.size) renderApprovals();
 }, 30000);
 setInterval(() => { for (const h of ui.hourly.values()) { h.shift(); h.push(0); } }, 3600e3);
@@ -1673,4 +1606,4 @@ mountLab();
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 
 // Debug handle for local testing only.
-if (location.hostname === 'localhost') window.__leo = { client, graph, ui, orbit, go };
+if (location.hostname === 'localhost') window.__leo = { client, ui, orbit, go };

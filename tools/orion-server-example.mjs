@@ -30,9 +30,11 @@ const tools = [
   { id: 'web', name: 'Web', desc: 'Search and read pages', calls: 0, lastUsed: Date.now() },
   { id: 'files', name: 'Files', desc: 'The ORION machine’s files', calls: 0, lastUsed: Date.now() },
   { id: 'voice', name: 'Voice', desc: 'Whisper and Kokoro', calls: 0, lastUsed: Date.now() },
-  { id: 'shopify', name: 'Shopify', desc: 'Ciel orders and products', calls: 0, lastUsed: Date.now() },
+  { id: 'email', name: 'Email', desc: 'Reads and drafts mail', calls: 0, lastUsed: Date.now() },
   { id: 'meta', name: 'Meta Ads', desc: 'Ciel ad results', calls: 0, lastUsed: Date.now() },
-  { id: 'gelato', name: 'Gelato', desc: 'Print fulfillment', calls: 0, lastUsed: Date.now() },
+  { id: 'clarity', name: 'Clarity', desc: 'Session replays and heatmaps', calls: 0, lastUsed: Date.now() },
+  { id: 'github', name: 'GitHub', desc: 'Repos and issues', calls: 0, lastUsed: Date.now() },
+  { id: 'printer', name: 'Printer', desc: 'The PC’s printer', calls: 0, lastUsed: Date.now() },
 ];
 let state = { state: 'idle', label: 'Standing by', detail: '' };
 const tasks = new Map();
@@ -52,7 +54,25 @@ approvals.set(a0.id, a0);
 /* ---------- connections ---------- */
 
 const clients = new Set();
-const broadcast = (type, data) => { for (const c of clients) c.send(type, data); };
+// admin (ACCOUNTS.md §6): every frame a room gets is mirrored to the owner's admin viewers.
+// Everyone shares one room here, so the mirror names it after the owner.
+const viewers = new Set();
+const isOwner = (c) => !/^guest/i.test(c.name ?? '');
+const mirror = (type, data) => {
+  if (type === 'vitals' || !viewers.size) return;
+  for (const v of viewers) v.send('admin_event', { user: 'owner', name: 'Owner', role: 'owner', type, data, at: Date.now() });
+};
+const broadcast = (type, data) => { for (const c of clients) c.send(type, data); mirror(type, data); };
+let accounts = [
+  { id: 'owner', name: 'Owner', role: 'owner', address: 'sir', budget_usd: null, allowance_left_usd: null, watch_items: 1, facts: 12, pending_approvals: 1, cloud_mode: 'local+' },
+  { id: 'g_example', name: 'guest', role: 'guest', address: 'Commander', budget_usd: 0.1, allowance_left_usd: 0.1, watch_items: 0, facts: 0, pending_approvals: 0, cloud_mode: 'local' },
+];
+const audit = [];
+const accountRows = () => accounts.map((a) => {
+  const on = [...clients].filter((c) => (a.role === 'owner' ? isOwner(c) : c.name?.toLowerCase() === a.name.toLowerCase()));
+  return { ...a, online: on.length > 0, state: on.length ? state.state : 'idle', last_seen: on.length ? Date.now() : a.last_seen ?? null };
+});
+const ownerOnly = (c) => { if (isOwner(c)) return true; c.send('error', { message: 'owner only' }); return false; };
 const setState = (s, label, detail = '') => { state = { state: s, label, detail, at: Date.now() }; broadcast('state', state); };
 const log = (kind, title, detail = '', extra = {}) => {
   const a = { id: uid('a'), kind, title, detail, at: Date.now(), ...extra };
@@ -64,6 +84,7 @@ async function useTool(tool, label, ms = 1200) {
   const t = tools.find((x) => x.id === tool);
   if (t) { t.calls++; t.lastUsed = Date.now(); }
   broadcast('tool', { call, tool, phase: 'call', label, at: Date.now() });
+  audit.unshift({ ts: Date.now(), user: 'Owner', tool, risk: 'low', outcome: 'ok' }); audit.length = Math.min(audit.length, 50);
   log('tool', label, '', { tool });
   await sleep(ms / 2);
   broadcast('tool', { call, tool, phase: 'result', label, at: Date.now() });
@@ -128,6 +149,61 @@ const handlers = {
     broadcast('cloud', cloud);
   },
   brief(c) { setTimeout(() => c.send('brief', makeBrief(c, false)), 1200); },
+
+  /* ---- owner only: the master view and account management ---- */
+  admin(c, { on }) {
+    if (!ownerOnly(c)) return;
+    if (!on) return void viewers.delete(c);
+    viewers.add(c);
+    c.send('admin_snapshot', {
+      accounts: accountRows(),
+      rooms: Object.fromEntries(accounts.map((a) => [a.id, { name: a.name, role: a.role, online: accountRows().find((x) => x.id === a.id).online, state: state.state,
+        activity: a.role === 'owner' ? activity.slice(0, 50) : [], approvals: a.role === 'owner' ? approvals.size : 0, tasks: tasks.size, watch: watch.items.length, brief: true }])),
+      audit: audit.slice(0, 50),
+      budget: { cap_usd: 5, spent_usd: +(5 - cloud.budget_remaining_usd).toFixed(2), remaining_usd: cloud.budget_remaining_usd },
+      routines: [{ name: 'morning_brief', at: '07:00', last_run: started, ok: true }],
+      heartbeat: { every_minutes: watch.every_minutes, last: Date.now() - 4 * 60e3 },
+      integrations: { email: 'connected', github: 'connected', printer: 'offline' },
+      safe_mode: false,
+      cloud_master: cloud.master, cloud_configured: cloud.configured,
+      at: Date.now(),
+    });
+  },
+  account_list(c) { if (ownerOnly(c)) c.send('accounts', { accounts: accountRows() }); },
+  account_add(c, { name, password, budget_usd, address, notes }) {
+    if (!ownerOnly(c)) return;
+    name = String(name ?? '').trim();
+    if (!name) return c.send('error', { message: 'A name is needed.' });
+    if (password && String(password).length < 8) return c.send('error', { message: 'Passwords need 8 characters or more.' });
+    if (accounts.some((a) => a.name.toLowerCase() === name.toLowerCase())) return c.send('error', { message: 'That name is taken.' });
+    const id = uid('u');
+    accounts.push({ id, name, role: 'guest', address: address ?? '', notes, budget_usd: budget_usd ?? 0.1, allowance_left_usd: budget_usd ?? 0.1, watch_items: 0, facts: 0, pending_approvals: 0, cloud_mode: 'local' });
+    c.send('accounts', { accounts: accountRows(), created: { user: id, token: crypto.randomBytes(12).toString('hex') } });
+  },
+  account_update(c, { id, name, password, budget_usd, address, cloud: own }) {
+    if (!ownerOnly(c)) return;
+    const a = accounts.find((x) => x.id === id);
+    if (!a) return c.send('error', { message: 'No such account.' });
+    if (password && String(password).length < 8) return c.send('error', { message: 'Passwords need 8 characters or more.' });
+    if (name) a.name = String(name).trim();
+    if (address !== undefined) a.address = address;
+    if (budget_usd !== undefined) { a.budget_usd = budget_usd; a.allowance_left_usd = Math.min(a.allowance_left_usd ?? budget_usd, budget_usd); }
+    if (own !== undefined) a.cloud_mode = own ? 'local+' : 'local';
+    c.send('accounts', { accounts: accountRows() });
+  },
+  account_remove(c, { id }) {
+    if (!ownerOnly(c)) return;
+    const a = accounts.find((x) => x.id === id);
+    if (!a || a.role === 'owner') return c.send('error', { message: 'That account can’t be removed.' });
+    accounts = accounts.filter((x) => x.id !== id);
+    for (const g of clients) if (g.name?.toLowerCase() === a.name.toLowerCase()) g.close(4401, 'account removed');
+    c.send('accounts', { accounts: accountRows(), removed: id });
+  },
+  cloud_master(c, { on }) {
+    if (!ownerOnly(c)) return;
+    cloud = { ...cloud, master: !!on, mode: on && cloud.own ? 'local+' : 'local' };
+    broadcast('cloud', cloud);
+  },
 };
 // The real ORION sends a cached brief in the snapshot, or a `brief` event a few seconds after connect.
 function makeBrief(c, fresh = true) {
@@ -219,8 +295,8 @@ server.on('upgrade', (req, socket) => {
       Promise.resolve(handlers[msg.type]?.(c, msg.data ?? {})).catch((e) => c.send('error', { message: String(e) }));
     }
   });
-  socket.on('close', () => { clients.delete(c); clearTimeout(helloTimer); });
-  socket.on('error', () => clients.delete(c));
+  socket.on('close', () => { clients.delete(c); viewers.delete(c); clearTimeout(helloTimer); });
+  socket.on('error', () => { clients.delete(c); viewers.delete(c); });
 });
 
 function safeEqual(a, b) {

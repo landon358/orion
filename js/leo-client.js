@@ -10,9 +10,9 @@
  */
 
 /**
- * The tools ORION can call. Each one is a planet on the map. `ring` is the orbit
- * (0 = closest to ORION), `phase` its starting position around that orbit (0–1).
- * The real server should send this list on connect.
+ * The demo's tools: the same 10 bands the real ORION sends in its snapshot, innermost
+ * first. `ring`/`phase` are leftovers from the old network map and unused; the UI
+ * never assumes this list, it renders whatever `tools` ORION sends.
  */
 export const TOOLS = [
   { id: 'memory',  name: 'Memory',     ring: 0, phase: 0.10, desc: 'What ORION remembers about you, Ciel, and past work' },
@@ -20,9 +20,11 @@ export const TOOLS = [
   { id: 'web',     name: 'Web',        ring: 1, phase: 0.28, desc: 'Search and read pages' },
   { id: 'files',   name: 'Files',      ring: 1, phase: 0.78, desc: 'The ORION machine’s file system' },
   { id: 'voice',   name: 'Voice',      ring: 2, phase: 0.05, desc: 'Whisper hears you, Kokoro speaks' },
-  { id: 'shopify', name: 'Shopify',    ring: 2, phase: 0.48, desc: 'Ciel orders, products, customers' },
+  { id: 'email',   name: 'Email',      ring: 2, phase: 0.48, desc: 'Reads and drafts mail; sending needs your OK' },
   { id: 'meta',    name: 'Meta Ads',   ring: 3, phase: 0.33, desc: 'Ciel ad spend, results, creatives' },
-  { id: 'gelato',  name: 'Gelato',     ring: 3, phase: 0.83, desc: 'Print fulfillment for Ciel orders' },
+  { id: 'clarity', name: 'Clarity',    ring: 3, phase: 0.83, desc: 'Session replays and heatmaps for the Ciel site' },
+  { id: 'github',  name: 'GitHub',     ring: 3, phase: 0.58, desc: 'Repos, issues and pushes' },
+  { id: 'printer', name: 'Printer',    ring: 3, phase: 0.08, desc: 'The printer on the PC' },
 ];
 
 export const STATES = ['idle', 'listening', 'thinking', 'working', 'speaking', 'needs-you', 'sleeping', 'error'];
@@ -39,6 +41,53 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 /* ---------- sample data (clearly fake; for the mockup only) ---------- */
+
+/**
+ * A pretend admin view for the demo (ACCOUNTS.md §6): the owner plus three friends,
+ * each with a room. Shapes follow the spec; budget/routines/heartbeat/integrations
+ * are undocumented there, so these are plausible guesses the page renders defensively.
+ */
+function sampleAdmin() {
+  const now = Date.now();
+  const m = 60e3, h = 3600e3;
+  const acc = (id, name, role, o) => ({ id, name, role, address: '', budget_usd: role === 'owner' ? null : 0.1, cloud_mode: 'local', ...o });
+  const accounts = [
+    acc('u_owner', 'Landon', 'owner', { online: true, state: 'idle', watch_items: 3, facts: 214, pending_approvals: 1, allowance_left_usd: null, last_seen: now, address: 'sir', cloud_mode: 'local+' }),
+    acc('u_maya', 'Maya', 'guest', { online: true, state: 'thinking', watch_items: 2, facts: 31, pending_approvals: 0, allowance_left_usd: 0.07, last_seen: now - 2 * m, cloud_mode: 'local+' }),
+    acc('u_theo', 'Theo', 'guest', { online: false, state: 'idle', watch_items: 1, facts: 12, pending_approvals: 0, allowance_left_usd: 0.1, last_seen: now - 5 * h }),
+    acc('u_jules', 'Jules', 'guest', { online: false, state: 'idle', watch_items: 0, facts: 4, pending_approvals: 0, allowance_left_usd: 0, last_seen: now - 3 * 86400e3 }),
+  ];
+  const act = (kind, title, detail, ago) => ({ id: uid('a'), kind, title, detail, at: now - ago });
+  const rooms = {
+    u_owner: { name: 'Landon', role: 'owner', online: true, state: 'idle', approvals: 1, tasks: 4, watch: 3, brief: true,
+      activity: [act('done', 'Sent morning briefing', '2 orders overnight', 6 * h), act('tool', 'Read 3 new reviews', 'All 5★', 3 * h), act('search', 'Searched “topographic map gifts”', '8 sources', 2 * h), act('think', 'Heartbeat', 'Order #1043 hasn’t shipped after 3 days', 40 * m)] },
+    u_maya: { name: 'Maya', role: 'guest', online: true, state: 'thinking', approvals: 0, tasks: 1, watch: 2, brief: true,
+      activity: [act('search', 'Searched “best trail running shoes 2026”', '6 sources', 9 * m), act('done', 'Timer: pasta', '10 minutes', 50 * m), act('think', 'Heartbeat', 'Nothing new on the race sign-up page', 2 * h), act('tool', 'Saved a fact', 'Training for the Squamish 50k', 26 * h)] },
+    u_theo: { name: 'Theo', role: 'guest', online: false, state: 'idle', approvals: 0, tasks: 0, watch: 1, brief: false,
+      activity: [act('search', 'Read a page', 'How to re-pot a fiddle leaf fig', 5 * h), act('done', 'Brief', 'Rain on Thursday', 20 * h)] },
+    u_jules: { name: 'Jules', role: 'guest', online: false, state: 'idle', approvals: 0, tasks: 0, watch: 0, brief: false,
+      activity: [act('rejected', 'Cloud allowance used up', 'Answers stay local now', 3 * 86400e3)] },
+  };
+  const audit = [
+    ['Landon', 'email', 'medium', 'approved', 22 * m], ['Maya', 'web', 'low', 'ok', 9 * m], ['Landon', 'files', 'low', 'ok', 2 * h],
+    ['Landon', 'meta', 'low', 'ok', 3 * h], ['Theo', 'web', 'low', 'ok', 5 * h], ['Maya', 'files', 'high', 'blocked', 7 * h],
+    ['Landon', 'printer', 'medium', 'approved', 9 * h], ['Jules', 'web', 'low', 'ok', 3 * 86400e3],
+  ].map(([user, tool, risk, outcome, ago]) => ({ ts: now - ago, user, tool, risk, outcome })).sort((a, b) => b.ts - a.ts);
+  return {
+    accounts, rooms, audit,
+    budget: { cap_usd: 5, spent_usd: 0.8, remaining_usd: 4.2, today_usd: 0.31, by_account: { Landon: 0.69, Maya: 0.03, Theo: 0, Jules: 0.1 } },
+    routines: [
+      { name: 'morning_brief', at: '07:00', last_run: now - 6 * h, ok: true },
+      { name: 'ciel_orders', every: '2h', last_run: now - 40 * m, ok: true },
+      { name: 'memory_inbox', every: '6h', last_run: now - 5 * h, ok: false },
+    ],
+    heartbeat: { every_minutes: 30, last: now - 12 * m, next: now + 18 * m, checks_today: 31, alerts_today: 2 },
+    integrations: { email: 'connected', meta: 'connected', github: 'connected', clarity: 'connected', printer: 'offline', shopify: 'not set up' },
+    safe_mode: false,
+    cloud_master: true, cloud_configured: true,
+    at: now,
+  };
+}
 
 function sampleMetrics() {
   const days = [];
@@ -107,7 +156,10 @@ export class MockLeoClient extends Emitter {
   brief = null;                       // {text, at, fresh}: the "while you were gone" card
   watch = { items: [], every_minutes: 30 };   // the heartbeat checklist: {items: [{id, n, text}], every_minutes}
   cloud = null;                       // Local / Local+: {mode, on, own, master, configured, allowance_left_usd, budget_remaining_usd, reason}
+  admin = null;                       // the owner's master view (ACCOUNTS.md §6), while it's switched on
   #busy = false;
+  #adminTimer = null;
+  #adminWorld = null;
   #bgTimer = null;
   #vitalsTimer = null;
   #speakAbort = null;
@@ -175,6 +227,72 @@ export class MockLeoClient extends Emitter {
 
   /** Ask for the brief now. The demo's is fixed, so it just comes back. */
   requestBrief() { setTimeout(() => this.brief && this.emit('brief', { ...this.brief, fresh: false }), 300); }
+
+  /* ---- owner admin view: a pretend household ---- */
+  adminOn(on) {
+    clearInterval(this.#adminTimer);
+    if (!on) { this.admin = null; return; }
+    this.#adminWorld ??= sampleAdmin();
+    setTimeout(() => {
+      this.admin = { ...this.#adminWorld, at: Date.now() };
+      this.emit('admin_snapshot', this.admin);
+      this.#adminTimer = setInterval(() => this.#adminTick(), 4200);
+    }, 350);
+  }
+  #adminTick() {
+    const w = this.#adminWorld;
+    const online = w.accounts.filter((a) => a.online);
+    const a = online[Math.floor(Math.random() * online.length)];
+    if (!a) return;
+    const lines = a.role === 'owner'
+      ? [['activity', { kind: 'tool', title: 'Checked Ciel orders', detail: '1 new order · $62' }], ['state', { state: 'working', label: 'Shopify', detail: 'orders' }], ['state', { state: 'idle', label: 'Standing by' }]]
+      : [['message', { role: 'user', text: 'what’s a good 20 minute dinner?' }], ['state', { state: 'thinking', label: 'Thinking', detail: 'local brain' }], ['activity', { kind: 'search', title: 'Searched “quick weeknight dinners”', detail: '5 sources' }], ['message', { role: 'leo', text: 'Garlic butter shrimp with orzo: 18 minutes, one pan.' }], ['state', { state: 'idle', label: 'Standing by' }]];
+    const [type, data] = lines[Math.floor(Math.random() * lines.length)];
+    const ev = { user: a.id, name: a.name, role: a.role, type, data: { id: uid('x'), at: Date.now(), ...data }, at: Date.now() };
+    if (type === 'state') { a.state = data.state; w.rooms[a.id].state = data.state; }
+    if (type === 'activity') w.rooms[a.id].activity.unshift(ev.data);
+    this.emit('admin_event', ev);
+  }
+  #accounts(extra = {}) {
+    const d = { accounts: this.#adminWorld.accounts.map((a) => ({ ...a })), ...extra };
+    if (this.admin) this.admin.accounts = d.accounts;
+    setTimeout(() => this.emit('accounts', d), 300);
+  }
+  accountAdd({ name, password, budget_usd, address, notes }) {
+    const w = (this.#adminWorld ??= sampleAdmin());
+    if (!name?.trim()) return this.emit('error', { message: 'A name is needed.' });
+    if (password && password.length < 8) return this.emit('error', { message: 'Passwords need 8 characters or more.' });
+    if (w.accounts.some((a) => a.name.toLowerCase() === name.trim().toLowerCase())) return this.emit('error', { message: 'That name is taken.' });
+    const id = uid('u');
+    w.accounts.push({ id, name: name.trim(), role: 'guest', address: address ?? '', notes, budget_usd: budget_usd ?? 0.1, allowance_left_usd: budget_usd ?? 0.1, online: false, state: 'idle', watch_items: 0, facts: 0, pending_approvals: 0, last_seen: null, cloud_mode: 'local' });
+    w.rooms[id] = { name: name.trim(), role: 'guest', online: false, state: 'idle', activity: [], approvals: 0, tasks: 0, watch: 0, brief: false };
+    this.#accounts({ created: { user: id, token: 'g_' + Math.random().toString(36).slice(2, 14) + Math.random().toString(36).slice(2, 14) } });
+  }
+  accountUpdate({ id, ...patch }) {
+    const a = this.#adminWorld?.accounts.find((x) => x.id === id);
+    if (!a) return;
+    if (patch.password !== undefined) delete patch.password;     // the mock keeps no passwords
+    if (patch.cloud !== undefined) { a.cloud_mode = patch.cloud ? 'local+' : 'local'; delete patch.cloud; }
+    if (patch.budget_usd !== undefined) a.allowance_left_usd = Math.min(a.allowance_left_usd ?? patch.budget_usd, patch.budget_usd);
+    Object.assign(a, patch);
+    if (patch.name && this.#adminWorld.rooms[id]) this.#adminWorld.rooms[id].name = patch.name;
+    this.#accounts();
+  }
+  accountRemove(id) {
+    const w = this.#adminWorld;
+    if (!w) return;
+    w.accounts = w.accounts.filter((a) => a.id !== id || a.role === 'owner');
+    delete w.rooms[id];
+    if (this.admin) delete this.admin.rooms[id];
+    this.#accounts({ removed: id });
+  }
+  accountList() { this.#adminWorld && this.#accounts(); }
+  setCloudMaster(on) {
+    if (!this.#adminWorld) return;
+    this.#adminWorld.cloud_master = !!on;
+    if (this.admin) this.admin.cloud_master = !!on;
+    if (this.cloud) { this.cloud = { ...this.cloud, master: !!on }; this.emit('cloud', this.cloud); }
+  }
 
   /** Barge-in: user started talking or tapped the orb while ORION speaks. */
   interrupt() {
@@ -251,6 +369,18 @@ export class MockLeoClient extends Emitter {
       { title: 'Clean up Downloads folder', source: 'ORION machine', status: 'queued', progress: 0, createdAt: now - 25 * 60e3 },
     ];
     seedTasks.forEach((t) => this.#upsertTask({ id: uid('t'), ...t }));
+    this.#upsertTask({ id: uid('t'), title: 'Draft the Black Friday email', source: 'Ciel ops', status: 'running', progress: 0.45, createdAt: now - 9 * 60e3, startedAt: now - 6 * 60e3 });
+    // routines and timers use the backend's id convention: routine_<name>, timer_<label>
+    const tomorrow7 = new Date(); tomorrow7.setDate(tomorrow7.getDate() + 1); tomorrow7.setHours(7, 0, 0, 0);
+    this.#upsertTask({ id: 'routine_morning_brief', title: 'Morning Ciel briefing', source: 'Routine', status: 'queued', every: 'day at 07:00', next: +tomorrow7 });
+    this.#upsertTask({ id: 'routine_ad_check', title: 'Check ad spend against cost per sale', source: 'Routine', status: 'queued', every: '6 hours', next: now + 2.2 * 3600e3 });
+    this.#upsertTask({ id: 'timer_laundry', title: 'Laundry is done', source: 'Timer', status: 'queued', next: now + 18 * 60e3 });
+    const on = (y, m, d, h = 9) => +new Date(y, m, d, h);
+    const yr = new Date().getFullYear();
+    this.#upsertTask({ id: 'plan_ciel10', title: 'Turn on the CIEL10 Black Friday code', source: 'Scheduled', status: 'queued', due: on(yr, 10, 27, 0) });
+    this.#upsertTask({ id: 'plan_domain', title: 'Renew the Ciel domain', source: 'Scheduled', status: 'queued', due: on(yr, 11, 14, 10) });
+    this.#upsertTask({ id: 'plan_samples', title: 'Order winter print samples', source: 'Scheduled', status: 'queued', due: on(yr + 1, 0, 8, 11) });
+    this.#upsertTask({ id: 'routine_reviews', title: 'Read new reviews and flag anything bad', source: 'Routine', status: 'queued', every: 'day at 18:30', next: on(yr, new Date().getMonth(), new Date().getDate(), 18) + 30 * 60e3 });
 
     const past = [
       ['done', 'Sent morning briefing', '2 orders overnight · CPA $21.40', 6 * 3600e3],
@@ -323,7 +453,7 @@ export class MockLeoClient extends Emitter {
       async () => {
         const t = this.#upsertTask({ id: uid('t'), title: 'Check Shopify orders', source: 'Ciel ops', status: 'running', progress: 0.1, createdAt: Date.now() });
         this.#setState('working', 'Checking Shopify', 'orders since 9:00');
-        await this.#useTool('shopify', 'Querying Shopify orders', 'orders since 9:00', 2400, { taskId: t.id });
+        await this.#useTool('email', 'Read new Shopify order emails', 'orders since 9:00', 2400, { taskId: t.id });
         this.#upsertTask({ id: t.id, progress: 0.6 });
         this.#setState('thinking', 'Reviewing orders');
         await sleep(1600);
@@ -331,7 +461,7 @@ export class MockLeoClient extends Emitter {
         this.metrics.days.at(-1).orders += n;
         this.metrics.updatedAt = Date.now();
         this.emit('metrics', this.metrics);
-        if (n) await this.#useTool('gelato', 'Checked Gelato print queue', `${n} order${n > 1 ? 's' : ''} ready to send`, 1800, { taskId: t.id });
+        if (n) await this.#useTool('email', 'Checked Gelato shipping emails', `${n} order${n > 1 ? 's' : ''} ready to send`, 1800, { taskId: t.id });
         this.#upsertTask({ id: t.id, status: 'done', progress: 1 });
         this.#log('done', n ? `${n} new order${n > 1 ? 's' : ''}` : 'No new orders', n ? 'Gelato fulfillment queued for approval' : 'Checked again in 30 min');
       },
@@ -415,7 +545,7 @@ export class MockLeoClient extends Emitter {
       let reply;
       if (route === 'ciel') {
         this.#setState('working', 'Checking Ciel', 'Shopify + Meta Ads');
-        await this.#useTool('shopify', 'Queried Shopify orders', 'last 7 days', 1600);
+        await this.#useTool('clarity', 'Pulled Clarity sessions', 'last 7 days', 1600);
         await this.#useTool('meta', 'Pulled Meta Ads insights', 'last 7 days', 1600);
         const k = this.metrics.kpis;
         reply = `Here's Ciel for the last 7 days (sample data): ${k.orders7d} orders, $${k.revenue7d} in revenue, $${k.spend7d} ad spend, so about $${k.cpa7d?.toFixed(2)} per sale. The contour living-room ad is still carrying most conversions. Want me to look at pausing the weakest ad?`;
@@ -537,6 +667,8 @@ export class RealLeoClient extends Emitter {
   brief = null;                       // {text, at, fresh}: the "while you were gone" card
   watch = { items: [], every_minutes: 30 };   // the heartbeat checklist: {items: [{id, n, text}], every_minutes}
   cloud = null;                       // Local / Local+: {mode, on, own, master, configured, allowance_left_usd, budget_remaining_usd, reason}
+  admin = null;                       // the owner's master view (ACCOUNTS.md §6): the last admin_snapshot, kept current
+  #adminWanted = false;               // re-asked for after a reconnect
   #url; #creds; #ws = null; #retry = 0; #timer = null; #pending = null;
   #mine = new Set();                  // ids of user messages this tab already showed
   #voiceTurn = false; #speech = null; #serverSpeaks = false;
@@ -629,6 +761,7 @@ export class RealLeoClient extends Emitter {
         this.brief = data.brief ?? null;
         if (data.watch) this.watch = data.watch;
         this.cloud = data.cloud ?? null;
+        if (this.#adminWanted) this.#raw({ type: 'admin', data: { on: true } });
         save({ url: this.#url, ...this.#creds });   // the next visit logs in silently
         this.#settle();
         this.emit('connection', { status: 'online', mode: this.mode });
@@ -652,7 +785,7 @@ export class RealLeoClient extends Emitter {
         if (t && data.phase === 'call') { t.calls = (t.calls ?? 0) + 1; t.lastUsed = data.at ?? Date.now(); }
         return this.emit('tool', data);
       }
-      case 'tools': this.tools = data.tools ?? []; return;
+      case 'tools': this.tools = data.tools ?? []; return this.emit('tools', this.tools);
       case 'task': { const task = { ...(this.tasks.get(data.id) ?? {}), ...data }; this.tasks.set(task.id, task); return this.emit('task', task); }
       case 'approval': { const a = { ...(this.approvals.get(data.id) ?? {}), ...data }; this.approvals.set(a.id, a); return this.emit('approval', a); }
       case 'activity': this.activity.unshift(data); this.activity.length = Math.min(this.activity.length, 200); return this.emit('activity', data);
@@ -664,7 +797,19 @@ export class RealLeoClient extends Emitter {
       case 'watch': this.watch = data; return this.emit('watch', data);
       case 'cloud': this.cloud = data; return this.emit('cloud', data);
       case 'route': return this.emit('route', data);
-      case 'error': console.warn('ORION:', data.message ?? data); return;
+      case 'admin_snapshot': this.admin = data; return this.emit('admin_snapshot', data);
+      case 'admin_event': {
+        const room = this.admin?.rooms?.[data.user];
+        if (room) {
+          if (data.type === 'state') room.state = data.data?.state ?? room.state;
+          if (data.type === 'activity') { (room.activity ??= []).unshift(data.data); room.activity.length = Math.min(room.activity.length, 50); }
+          const a = this.admin.accounts?.find((x) => x.id === data.user);
+          if (a && data.type === 'state') a.state = data.data?.state ?? a.state;
+        }
+        return this.emit('admin_event', data);
+      }
+      case 'accounts': if (this.admin && data.accounts) this.admin.accounts = data.accounts; return this.emit('accounts', data);
+      case 'error': console.warn('ORION:', data.message ?? data); return this.emit('error', data);
       default: return;                              // unknown types are ignored, so the server can add more
     }
   }
@@ -689,6 +834,13 @@ export class RealLeoClient extends Emitter {
   watchList() { this.#raw({ type: 'watch_list', data: {} }); }
   /** Local / Local+ (ACCOUNTS.md §5b): this account's own switch; ORION replies with `cloud`. */
   setCloud(on) { this.#cmd('cloud', { on: !!on }); }
+  /** Owner only (ACCOUNTS.md §6): the master view and account management. */
+  adminOn(on) { this.#adminWanted = !!on; if (!on) this.admin = null; this.#raw({ type: 'admin', data: { on: !!on } }); }
+  accountAdd(d) { this.#cmd('account_add', d); }
+  accountUpdate(d) { this.#cmd('account_update', d); }
+  accountRemove(id) { this.#cmd('account_remove', { id }); }
+  accountList() { this.#raw({ type: 'account_list', data: {} }); }
+  setCloudMaster(on) { this.#cmd('cloud_master', { on: !!on }); }
   interrupt() { this.#speech?.cancel(); this.#speech = null; this.#raw({ type: 'interrupt', data: {} }); }
 
   snapshot() {
