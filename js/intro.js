@@ -7,9 +7,9 @@
  * Click or press any key to skip. Once per browser session; tapping the
  * logo in the top bar (or ?intro in the URL) replays it.
  *
- * With `gate` (the login), the name holds open and a panel rises beneath it;
- * on phones the stacked name condenses towards the top to make room. The
- * capitals only fly to the top bar once `gate(panel)` resolves.
+ * With `gate` (the login), the capitals first fly back together into ORION,
+ * centred at the top of the screen, and the login appears beneath it. Once
+ * `gate(panel)` resolves, ORION glides from there to its place in the top bar.
  */
 import { orionLetters } from './logo.js';
 
@@ -150,7 +150,7 @@ export async function playIntro({ brand, force = false, gate = null } = {}) {
         { opacity: 0, filter: 'blur(8px)', transform: 'translateX(-0.25em)' },
         { opacity: 1, filter: 'blur(0px)', transform: 'none' },
       ], { duration: 900, delay: 780 + i * 90, easing: SOFT }));
-      await wait(1800 + (gate ? 500 : 1700));
+      await wait(1800 + (gate ? 900 : 1700));
     }
 
     // 2. the name unfolds; each thread letter becomes a solid letter
@@ -166,68 +166,36 @@ export async function playIntro({ brand, force = false, gate = null } = {}) {
         { opacity: 0, filter: 'blur(10px)', transform: 'translateX(-0.25em)' },
         { opacity: 1, filter: 'blur(0px)', transform: 'none' },
       ], { duration: 1000, delay: 420 + i * 70, easing: SOFT }));
-      await wait(Dur + (gate ? 400 : 1600));
+      await wait(Dur + (gate ? 900 : 1600));
     }
   }
 
-  // 2b. the login: the name holds open, the panel rises beneath it
-  let cond = 1;
-  if (gate) {
+  // 3. the words fade; the capitals fly to their places (the top bar, or with a login the title
+  //    at the top of the screen) and become threads again
+  const target = brand?.querySelector('svg');
+  const still = reduced.matches;
+  const fast = (skipped && !gate) || still || !target;
+  const Dur = still ? 0 : fast ? 420 : skipped ? 700 : 1250;
+  const flyers = [];
+  /** Where each landing letter sits for a logo drawn at box {left, top, width}. */
+  const spot = (box, L) => { const ub = box.width / VB.w; return { x: box.left + (L.x0 - VB.x) * ub, y: box.top + (16 - VB.y) * ub, ub }; };
+  const title = { width: Math.min(72, innerWidth * 0.2) };
+  Object.assign(title, { left: (innerWidth - title.width) / 2, top: stack ? 30 : 36 });
+  const dest = gate ? title : target?.getBoundingClientRect();
+
+  if (!fast || gate) {
     all.forEach((a) => a.finish());
-    // wherever a skip left things, settle on the open name
     threads.forEach((t) => { t.style.opacity = '0'; });
     chars.forEach((c) => { c.style.opacity = '1'; c.style.filter = 'none'; });
-    texts.forEach((t) => { t.style.opacity = '1'; t.style.filter = 'none'; t.style.transform = 'none'; });
-    rests.forEach((r, i) => { r.style.width = `${widths[i]}px`; });
-    if (stack) caps.forEach((c) => { c.style.transform = 'none'; });
-    else { caps.forEach((c, i) => { c.style.width = `${cw1[i]}px`; c.style.marginRight = '0px'; }); words.style.transform = `scale(${sE})`; }
-    glow.style.opacity = '1';
-    el.removeEventListener('pointerdown', skip);
-    removeEventListener('keydown', skip);
-    skipped = false;
-    el.classList.add('gated');
-    el.removeAttribute('aria-hidden');
-    words.setAttribute('aria-hidden', 'true');
-
-    const panel = document.createElement('div');
-    panel.className = 'gate-wrap';
-    el.append(panel);
-    const done = gate(panel);                    // fills the panel straight away, resolves once logged in
-
-    // make room: phones shrink the column towards the top, wide screens lift the line
-    const H = innerHeight, wr = words.getBoundingClientRect();
-    const gap = stack ? 28 : 48;
-    cond = stack ? Math.min(1, (0.3 * H) / wr.height) : Math.min(1, (0.9 * innerWidth) / wr.width);
-    const hw = wr.height * cond, ph = panel.offsetHeight;
-    const top = Math.max(stack ? 40 : 24, (H - (hw + gap + ph)) / 2);
-    const dy = top + hw / 2 - (wr.top + wr.height / 2);
-    panel.style.top = `${top + hw + gap}px`;
-    const still = reduced.matches;
-    words.animate([{ translate: '0 0', scale: '1' }, { translate: `0 ${dy.toFixed(1)}px`, scale: String(cond) }], { duration: still ? 0 : 900, easing: SMOOTH, fill: 'both' });
-    glow.animate([{ translate: '-50% -50%' }, { translate: `-50% calc(-50% + ${dy.toFixed(1)}px)` }], { duration: still ? 0 : 900, easing: SMOOTH, fill: 'both' });
-    panel.animate([{ opacity: 0, transform: 'translateY(14px)', filter: 'blur(6px)' }, { opacity: 1, transform: 'none', filter: 'blur(0px)' }], { duration: still ? 0 : 700, delay: still ? 0 : 280, easing: SOFT, fill: 'both' });
-
-    await done;
-    await panel.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(8px)' }], { duration: still ? 0 : 320, easing: 'ease-in', fill: 'both' }).finished;
-    el.setAttribute('aria-hidden', 'true');
-  }
-
-  // 3. the words fade; the capitals fly to their places in the top bar and become threads again
-  const target = brand?.querySelector('svg');
-  const fast = skipped || reduced.matches || !target;
-  const Dur = fast ? 420 : 1250;
-  if (!fast) {
-    const b = target.getBoundingClientRect();
-    const ub = b.width / VB.w;
-    const s = sE * cond;
-    texts.forEach((t, i) => anim(t, [{ opacity: 1, filter: 'blur(0px)' }, { opacity: 0, filter: 'blur(10px)' }], { duration: 420, delay: i * 30, easing: 'ease-in' }));
-    glow.animate([{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(0.8)' }], { duration: Dur, easing: 'ease-in', fill: 'both' });
+    texts.forEach((t, i) => anim(t, [{ opacity: 1, filter: 'blur(0px)' }, { opacity: 0, filter: 'blur(10px)' }], { duration: still ? 0 : 420, delay: i * 30, easing: 'ease-in' }));
+    if (!gate) glow.animate([{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(0.8)' }], { duration: Dur, easing: 'ease-in', fill: 'both' });
+    const s = sE;
     chars.forEach((c, i) => {
       const L = landing[i];
       const r = c.getBoundingClientRect();
-      // where the solid letter is now (its cap-height box), and where its thread twin sits in the top bar
+      // where the solid letter is now (its cap-height box), and where its thread twin lands
       const sx = r.left, sy = r.top + (baseY - 104 * u) * s;
-      const tx = b.left + (L.x0 - VB.x) * ub, ty = b.top + (16 - VB.y) * ub;
+      const { x: tx, y: ty, ub } = spot(dest, L);
       const tw = (L.x1 - L.x0) * ub, th = 108 * ub;
       const k = (u * s) / ub;
       const fly = document.createElement('div');
@@ -236,8 +204,9 @@ export async function playIntro({ brand, force = false, gate = null } = {}) {
       const fs = F * ub / u;                                    // font size whose cap height matches the logo letter
       fly.innerHTML = `<span class="ch" style="font-size:${fs}px;--lh:${((A + D) / F).toFixed(3)};bottom:${4 * ub - (D / F) * fs}px">${c.textContent}</span>${L.svg}`;
       el.append(fly);
+      flyers.push({ fly, L, tx, ty, ub });
       c.style.visibility = 'hidden';
-      const delay = i * 70;
+      const delay = still ? 0 : i * 70;
       fly.animate([
         { transform: `translate(${sx - tx}px, ${sy - ty}px) scale(${k})` },
         { transform: 'none' },
@@ -245,14 +214,46 @@ export async function playIntro({ brand, force = false, gate = null } = {}) {
       fly.querySelector('.ch').animate([{ opacity: 1 }, { opacity: 1, offset: 0.35 }, { opacity: 0 }], { duration: Dur * 0.8, delay, easing: 'ease-in-out', fill: 'both' });
       fly.querySelectorAll('path').forEach((p) => p.animate([{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], { duration: Dur * 0.75, delay: delay + Dur * 0.3, easing: 'cubic-bezier(0.3, 0, 0.2, 1)', fill: 'both' }));
     });
-    await new Promise((r) => setTimeout(r, 160));
+    if (!gate) await new Promise((r) => setTimeout(r, 160));
   } else {
     all.forEach((a) => a.finish());
     words.animate([{ opacity: 1 }, { opacity: 0 }], { duration: Dur, fill: 'both' });
   }
-  el.querySelector('.intro-bg').animate([{ opacity: 1 }, { opacity: 0 }], { duration: fast ? Dur : 1000, easing: 'ease-in-out', fill: 'both' });
+
+  // 3b. the login, under the title; when it's done ORION glides on to the top bar
+  if (gate) {
+    el.removeEventListener('pointerdown', skip);
+    removeEventListener('keydown', skip);
+    el.classList.add('gated');
+    el.removeAttribute('aria-hidden');
+    words.setAttribute('aria-hidden', 'true');
+    glow.animate([{ opacity: 1 }, { opacity: 0 }], { duration: Dur || 1, easing: 'ease-in-out', fill: 'both' });
+
+    const panel = document.createElement('div');
+    panel.className = 'gate-wrap';
+    el.append(panel);
+    const done = gate(panel);
+    panel.animate([{ opacity: 0, filter: 'blur(8px)', transform: 'translateY(12px)' }, { opacity: 1, filter: 'blur(0px)', transform: 'none' }],
+      { duration: still ? 0 : 800, delay: still ? 0 : Dur * 0.55, easing: SOFT, fill: 'both' });
+
+    await done;
+    await panel.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(8px)' }], { duration: still ? 0 : 320, easing: 'ease-in', fill: 'both' }).finished;
+    el.setAttribute('aria-hidden', 'true');
+
+    const b2 = target?.getBoundingClientRect();
+    const move = still || !b2 ? 0 : 1000;
+    
+    if (b2) flyers.forEach(({ fly, L, tx, ty, ub }, i) => {
+      const { x, y, ub: ub2 } = spot(b2, L);
+      fly.getAnimations().forEach((a) => a.finish());
+      fly.animate([{ transform: 'none' }, { transform: `translate(${x - tx}px, ${y - ty}px) scale(${ub2 / ub})` }],
+        { duration: move, delay: still ? 0 : i * 40, easing: GLIDE, fill: 'both' });
+    });
+  }
+
+  el.querySelector('.intro-bg').animate([{ opacity: 1 }, { opacity: 0 }], { duration: gate ? (still ? 0 : 1000) : fast ? Dur : 1000, easing: 'ease-in-out', fill: 'both' });
   document.body.classList.add('intro-out');
-  await new Promise((r) => setTimeout(r, fast ? Dur + 40 : Dur + 4 * 70 - 120));
+  await new Promise((r) => setTimeout(r, gate ? (still ? 40 : 1000 + 4 * 40 + 40) : fast ? Dur + 40 : Dur + 4 * 70 - 120));
   document.body.classList.remove('intro-run', 'intro-out');
   el.remove();
   removeEventListener('keydown', skip);
