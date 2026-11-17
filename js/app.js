@@ -220,6 +220,7 @@ client.on('message', (m) => (m.role === 'user' ? addUserMessage(m) : upsertLeoMe
 client.on('activity', (a) => {
   if (ui.turn && ['tool', 'search', 'think'].includes(a.kind)) { ui.turn.steps.push(a.title); setWorking(`${a.title}…`); }
   if (ui.drawerOpen && ui.panel === 'activity') renderActivity();
+  if (ui.drawerOpen && ui.panel === 'watch' && isHeartbeat(a)) renderWatch();
   if (ui.selected === 'leo' || a.tool === ui.selected) scheduleDetail();
 });
 
@@ -1166,8 +1167,8 @@ $('#btn-map').addEventListener('click', () => {
 /* ================================================================ */
 
 const drawer = $('#drawer');
-const PANELS = ['activity', 'tasks', 'vitals'];
-const TITLES = { activity: 'Activity', tasks: 'Tasks', vitals: 'Vitals' };
+const PANELS = ['activity', 'tasks', 'watch', 'vitals'];
+const TITLES = { activity: 'Activity', tasks: 'Tasks', watch: 'Watching', vitals: 'Vitals' };
 
 function openDrawer(panel = ui.panel) {
   selectPanel(panel);
@@ -1200,6 +1201,7 @@ addEventListener('keydown', (e) => {
 });
 
 function selectPanel(p) {
+  if (p !== ui.panel || !ui.drawerOpen) ui.watchResult = '';
   ui.panel = p;
   $('#drawer-title').textContent = TITLES[p];
   $$('#segmented [role=tab]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.panel === p)));
@@ -1210,7 +1212,7 @@ function selectPanel(p) {
 $('#segmented').addEventListener('click', (e) => { const p = e.target.closest('[data-panel]')?.dataset.panel; if (p) selectPanel(p); });
 
 function renderPanel() {
-  ({ activity: renderActivity, tasks: renderTasks, vitals: renderVitals })[ui.panel]();
+  ({ activity: renderActivity, tasks: renderTasks, watch: renderWatch, vitals: renderVitals })[ui.panel]();
 }
 
 function renderActivity() {
@@ -1230,6 +1232,77 @@ function renderActivity() {
         </div>`).join('')}
     </div>`;
 }
+
+/* ---------- Watching: the heartbeat checklist (ACCOUNTS.md §4) ---------- */
+// ORION checks each line every few minutes and pings you when one comes true. The chat
+// ("let me know if…") and this panel edit the same list; every change comes back as `watch`.
+const WATCH_MAX = 25;
+const isHeartbeat = (a) => a.kind === 'think' && /heartbeat/i.test(a.title ?? '');
+let watchWait = 0;
+function renderWatch() {
+  const el = $('#panel-watch');
+  const s = client.snapshot();
+  const w = s.watch ?? { items: [] };
+  const items = [...(w.items ?? [])].sort((a, b) => (a.n ?? 0) - (b.n ?? 0));
+  const alerts = s.activity.filter(isHeartbeat).sort((a, b) => b.at - a.at).slice(0, 8);
+  const off = account()?.features?.watch === false;
+  const draft = el.querySelector('#watch-in')?.value ?? '';
+  const focused = document.activeElement?.id === 'watch-in';
+  const full = items.length >= WATCH_MAX;
+  el.innerHTML = off ? '<div class="empty">Watching isn’t on for this account.</div>' : `
+    <form class="watch-add" id="watch-add" autocomplete="off">
+      <label class="sr-only" for="watch-in">Something for ORION to keep an eye on</label>
+      <input id="watch-in" maxlength="200" placeholder="${full ? 'The list is full' : 'Tell me if…'}" ${full || ui.watchBusy ? 'disabled' : ''} enterkeyhint="done">
+      <button class="btn primary" type="submit" ${ui.watchBusy ? 'disabled' : ''}>${ui.watchBusy ? 'Adding' : 'Add'}</button>
+    </form>
+    ${ui.watchResult ? `<p class="watch-result">${esc(ui.watchResult)}</p>` : ''}
+    <div class="group watch-list">${items.length ? items.map((it) => `
+      <div class="watch-item${ui.watchGoing.has(it.id) ? ' going' : ''}">
+        <span class="watch-n">${String(it.n ?? '').padStart(2, '0')}</span>
+        <span class="watch-t">${esc(it.text)}</span>
+        <button class="watch-x" data-unwatch="${esc(it.id)}" aria-label="Stop watching: ${esc(it.text)}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>
+        </button>
+      </div>`).join('') : '<div class="empty watch-empty">Nothing on the list. Tell ORION what to keep an eye on, here or in chat.</div>'}
+    </div>
+    <p class="watch-meta">Checked every ${w.every_minutes ?? 30} minutes · ${items.length} of ${WATCH_MAX}</p>
+    ${alerts.length ? `<h3 class="watch-h">Alerts</h3>
+    <div class="group">${alerts.map((a) => `
+      <div class="tl-item k-think">
+        <span class="tl-icon">${ICON.think}</span>
+        <div><div class="tl-title">${esc(a.detail || a.title)}</div></div>
+        <span class="tl-time">${ago(a.at)}</span>
+      </div>`).join('')}</div>` : ''}`;
+  const inp = el.querySelector('#watch-in');
+  if (inp) { inp.value = draft; if (focused) inp.focus({ preventScroll: true }); }
+}
+ui.watchGoing = new Set();
+$('#panel-watch').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const inp = $('#watch-in');
+  const text = inp?.value.trim();
+  if (!text || ui.watchBusy) return;
+  ui.watchBusy = true; ui.watchResult = '';
+  client.watchAdd(text);
+  inp.value = '';
+  clearTimeout(watchWait);
+  watchWait = setTimeout(() => { ui.watchBusy = false; ui.watchResult = 'No answer from ORION yet. It may still be added.'; renderWatch(); }, 10000);
+  renderWatch();
+});
+$('#panel-watch').addEventListener('click', (e) => {
+  const x = e.target.closest('[data-unwatch]');
+  if (!x) return;
+  ui.watchGoing.add(x.dataset.unwatch);
+  client.watchRemove(x.dataset.unwatch);
+  renderWatch();
+});
+client.on('watch', (w) => {
+  clearTimeout(watchWait);
+  ui.watchBusy = false;
+  ui.watchGoing = new Set([...ui.watchGoing].filter((id) => w.items?.some((it) => it.id === id)));
+  if (w.result) ui.watchResult = w.result;
+  if (ui.drawerOpen && ui.panel === 'watch') renderWatch();
+});
 
 function renderTasks() {
   const s = client.snapshot();

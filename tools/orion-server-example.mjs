@@ -38,6 +38,9 @@ let state = { state: 'idle', label: 'Standing by', detail: '' };
 const tasks = new Map();
 const approvals = new Map();
 const activity = [];
+// the watch list: one per account in the real ORION; one shared list is enough here
+let watch = { every_minutes: 30, items: [{ id: 'w1', n: 1, text: 'Tell me if my tea timer finishes' }] };
+const renumber = () => { watch.items = watch.items.map((w, i) => ({ ...w, n: i + 1 })); };
 const vitals = { gpu: 6, vram: 5.9, vramTotal: 8, temp: 45, tps: 0, ctx: 0.1, uptime: 0, queue: 0, model: 'qwen3.5-9b · Q4_K_M' };
 const started = Date.now();
 const a0 = { id: uid('ap'), title: 'Reply to a 5★ review', source: 'Ciel ops', summary: 'Drafted a short thank-you.', preview: 'Thank you so much! — Ciel', status: 'pending', at: Date.now() };
@@ -94,6 +97,25 @@ const handlers = {
   reject(c, { id }) { decide(id, 'rejected'); },
   listening(c, { on }) { if (on && state.state === 'idle') setState('listening', 'Listening'); if (!on && state.state === 'listening') setState('idle', 'Standing by'); },
   interrupt() { interrupted = true; },
+  watch_add(c, { text }) {
+    text = String(text ?? '').trim();
+    if (!text) return c.send('watch', { ...watch, result: 'That was empty, so I didn’t add anything.' });
+    if (watch.items.length >= 25) return c.send('watch', { ...watch, result: 'The list is full: 25 is the limit.' });
+    watch.items.push({ id: `w${Date.now().toString(36)}`, text }); renumber();
+    broadcast('watch', { ...watch, result: `Added. I’ll check “${text}” every ${watch.every_minutes} minutes.` });
+    // a stand-in heartbeat: pretend the new condition came true a few seconds later
+    setTimeout(() => {
+      const at = Date.now();
+      broadcast('activity', { id: uid('a'), kind: 'think', title: 'Heartbeat', detail: `True now: ${text}`, at });
+      broadcast('notify', { id: uid('n'), title: 'Heartbeat', body: `True now: ${text}` });
+    }, 6000);
+  },
+  watch_remove(c, { id, n }) {
+    const before = watch.items.length;
+    watch.items = watch.items.filter((w) => w.id !== id && w.n !== n); renumber();
+    broadcast('watch', { ...watch, result: watch.items.length < before ? 'Removed.' : 'That one wasn’t on the list.' });
+  },
+  watch_list(c) { c.send('watch', watch); },
   brief(c) { setTimeout(() => c.send('brief', makeBrief(c, false)), 1200); },
 };
 // The real ORION sends a cached brief in the snapshot, or a `brief` event a few seconds after connect.
@@ -136,6 +158,7 @@ function welcome(c) {
     approvals: /^guest/i.test(c.name) ? [] : [...approvals.values()],
     activity,
     vitals,
+    watch,
     // metrics: omitted, so the business page keeps its labelled sample data
   });
 }

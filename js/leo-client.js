@@ -105,6 +105,7 @@ export class MockLeoClient extends Emitter {
   tools = TOOLS.map((t) => ({ ...t, calls: Math.round(rand(2, 30)), lastUsed: Date.now() - rand(5, 300) * 60e3 }));
   vitals = { gpu: 8, vram: 5.9, vramTotal: 8, temp: 46, tps: 0, ctx: 0.12, uptime: 3 * 86400 + 4 * 3600 + 17 * 60, queue: 0, model: 'qwen3.5-9b · Q4_K_M' };
   brief = null;                       // {text, at, fresh}: the "while you were gone" card
+  watch = { items: [], every_minutes: 30 };   // the heartbeat checklist: {items: [{id, n, text}], every_minutes}
   #busy = false;
   #bgTimer = null;
   #vitalsTimer = null;
@@ -143,6 +144,25 @@ export class MockLeoClient extends Emitter {
     if (!on && this.state === 'listening') this.#setState('idle', 'Standing by');
   }
 
+  /** The watch list: ORION checks each line on its heartbeat and tells you when one comes true. */
+  watchAdd(text) {
+    setTimeout(() => {
+      const items = this.watch.items;
+      if (items.length >= 25) return this.emit('watch', { ...this.watch, result: 'The list is full: 25 is the limit. Remove one first.' });
+      const id = `w${Date.now().toString(36)}`;
+      this.watch = { ...this.watch, items: [...items, { id, n: items.length + 1, text }], result: 'Added. I’ll check it on my next round.' };
+      this.emit('watch', this.watch);
+    }, 600);
+  }
+  watchRemove(id) {
+    setTimeout(() => {
+      const items = this.watch.items.filter((w) => w.id !== id).map((w, i) => ({ ...w, n: i + 1 }));
+      this.watch = { ...this.watch, items, result: 'Removed.' };
+      this.emit('watch', this.watch);
+    }, 400);
+  }
+  watchList() { setTimeout(() => this.emit('watch', { ...this.watch, result: undefined }), 200); }
+
   /** Ask for the brief now. The demo's is fixed, so it just comes back. */
   requestBrief() { setTimeout(() => this.brief && this.emit('brief', { ...this.brief, fresh: false }), 300); }
 
@@ -161,6 +181,7 @@ export class MockLeoClient extends Emitter {
       tools: this.tools.map((t) => ({ ...t })),
       state: this.state,
       brief: this.brief,
+      watch: this.watch,
     };
   }
 
@@ -202,6 +223,11 @@ export class MockLeoClient extends Emitter {
 
   #seed() {
     const now = Date.now();
+    this.watch = { every_minutes: 30, items: [
+      { id: 'w1', n: 1, text: 'Tell me if a Ciel order hasn’t shipped within 3 days' },
+      { id: 'w2', n: 2, text: 'Let me know if the contour ad costs more than $50 a sale' },
+      { id: 'w3', n: 3, text: 'Warn me if it’s going to snow at the cabin this weekend' },
+    ] };
     this.brief = {
       text: 'Ciel had 3 orders overnight, $186 in all, and the contour living room ad is still the cheapest per sale at $39. Two new five-star reviews came in. Black Friday CIEL10 is set to go live on the 27th.\n\nOne thing needs you: a draft reply to the Gelato support thread is waiting under the bell.',
       at: now - 2 * 3600e3, fresh: true,
@@ -219,6 +245,7 @@ export class MockLeoClient extends Emitter {
       ['tool', 'Read 3 new reviews', 'All 5★. One mentions fast shipping', 3 * 3600e3],
       ['search', 'Searched “topographic map gifts”', '8 sources · saved 3', 2 * 3600e3],
       ['think', 'Planned research task', 'Broke into 4 steps', 40 * 60e3],
+      ['think', 'Heartbeat', 'Order #1043 hasn’t shipped after 3 days', 5 * 3600e3],
     ];
     past.forEach(([kind, title, detail, ago]) => this.activity.push({ id: uid('a'), kind, title, detail, at: now - ago }));
 
@@ -493,6 +520,7 @@ export class RealLeoClient extends Emitter {
   vitals = { gpu: 0, vram: 0, vramTotal: 8, temp: 0, tps: 0, ctx: 0, uptime: 0, queue: 0, model: 'ORION' };
   account = null;                     // who is logged in: {id, name, role, address, features, …}
   brief = null;                       // {text, at, fresh}: the "while you were gone" card
+  watch = { items: [], every_minutes: 30 };   // the heartbeat checklist: {items: [{id, n, text}], every_minutes}
   #url; #creds; #ws = null; #retry = 0; #timer = null; #pending = null;
   #mine = new Set();                  // ids of user messages this tab already showed
   #voiceTurn = false; #speech = null; #serverSpeaks = false;
@@ -583,6 +611,7 @@ export class RealLeoClient extends Emitter {
         this.#serverSpeaks = !!data.speaks;
         if (data.account) this.account = data.account;
         this.brief = data.brief ?? null;
+        if (data.watch) this.watch = data.watch;
         save({ url: this.#url, ...this.#creds });   // the next visit logs in silently
         this.#settle();
         this.emit('connection', { status: 'online', mode: this.mode });
@@ -615,6 +644,7 @@ export class RealLeoClient extends Emitter {
       case 'audio': return this.emit('audio', data);
       case 'notify': return this.emit('notify', { id: data.id ?? uid('n'), target: {}, ...data });
       case 'brief': this.brief = data; return this.emit('brief', data);
+      case 'watch': this.watch = data; return this.emit('watch', data);
       case 'error': console.warn('ORION:', data.message ?? data); return;
       default: return;                              // unknown types are ignored, so the server can add more
     }
@@ -634,6 +664,10 @@ export class RealLeoClient extends Emitter {
   setListening(on) { this.#raw({ type: 'listening', data: { on } }); }
   /** Ask for the brief now (ORION rate-limits; a cached one comes back with fresh: false). */
   requestBrief() { this.#raw({ type: 'brief', data: {} }); }
+  /** The watch list (ACCOUNTS.md §4): every change comes back as a `watch` event. */
+  watchAdd(text) { this.#cmd('watch_add', { text }); }
+  watchRemove(id) { this.#cmd('watch_remove', { id }); }
+  watchList() { this.#raw({ type: 'watch_list', data: {} }); }
   interrupt() { this.#speech?.cancel(); this.#speech = null; this.#raw({ type: 'interrupt', data: {} }); }
 
   snapshot() {
@@ -646,6 +680,7 @@ export class RealLeoClient extends Emitter {
       tools: this.tools.map((t) => ({ ...t })),
       state: this.state,
       brief: this.brief,
+      watch: this.watch,
     };
   }
 }
