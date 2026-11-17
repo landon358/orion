@@ -66,6 +66,17 @@ const EXPLORE = { shopify: 'business', meta: 'business', gelato: 'business', pla
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 
 const client = createLeoClient();
+
+/* ---------- who's logged in: the owner sees everything, other accounts only chat ---------- */
+// The mock and a token login with no account info behave as the owner.
+const account = () => client.account ?? null;
+const canAct = () => account()?.features?.actions !== false;
+/** How ORION addresses this person: their `address` ("sir", "Commander"), else their name. */
+const address = () => account()?.address || (canAct() ? 'sir' : account()?.name) || 'sir';
+function applyAccount() {
+  body.classList.toggle('guest', !canAct());
+  if (!canAct() && ui.route === 'business') go('home');
+}
 const graph = new LeoGraph($('#graph'));
 const body = document.body;
 const root = document.documentElement;
@@ -149,6 +160,7 @@ client.on('connection', ({ status, mode }) => {
   c.className = `conn ${status}`;
   c.setAttribute('aria-label', status === 'online' ? `Connected${mode === 'mock' ? ', demo data' : ''}` : status === 'connecting' ? 'Connecting' : 'Offline');
   if (status === 'online') {
+    applyAccount();
     const s = client.snapshot();
     graph.setTools(s.tools);
     orbit.setTools(s.tools);
@@ -555,7 +567,9 @@ function welcome() {
   const pending = s.approvals.filter((a) => a.status === 'pending').length;
   upsertLeoMessage({
     id: 'welcome', role: 'leo', streaming: false,
-    text: `${greet}. While you were away I finished ${done} tasks and kept an eye on Ciel.${pending ? ` ${pending === 1 ? 'One approval is' : `${pending} approvals are`} waiting under the bell.` : ''}`,
+    text: canAct()
+      ? `${greet}. While you were away I finished ${done} tasks and kept an eye on Ciel.${pending ? ` ${pending === 1 ? 'One approval is' : `${pending} approvals are`} waiting under the bell.` : ''}`
+      : `${greet}, ${address()}. What can I do for you?`,
   });
   updateBadge();
 }
@@ -1373,7 +1387,8 @@ function go(r) {
 }
 
 function applyRoute() {
-  const r = ROUTES[location.hash] ?? 'home';
+  let r = ROUTES[location.hash] ?? 'home';
+  if (r === 'business' && !canAct()) { history.replaceState(null, '', HASH.home); r = 'home'; }
   const prev = ui.route;
   ui.route = r;
   ['home', 'chat', 'business'].forEach((k) => body.classList.toggle(k, k === r));
@@ -1426,24 +1441,31 @@ const ASK = [
   ['Research what hikers want as gifts this winter', 'Research gift ideas'],
   ['Help me plan the Black Friday launch', 'Plan Black Friday'],
 ];
+const ASK_GUEST = [
+  ['What’s the weather tomorrow?', 'Weather tomorrow'],
+  ['Set a timer for 10 minutes', 'Set a timer'],
+  ['Research something for me', 'Research something'],
+];
 function renderSummary() {
   const s = client.snapshot();
   const away = s.activity.filter((a) => ['tool', 'search', 'done', 'think'].includes(a.kind)).sort((a, b) => b.at - a.at).slice(0, 4);
   const done = s.tasks.filter((t) => t.status === 'done').length;
   const h = new Date().getHours();
   $('#summary').innerHTML = `
-    <h2 class="sum-hi">Hello sir,</h2>
-    <p class="sum-lead">while you were gone I finished ${done} task${done === 1 ? '' : 's'} and kept an eye on Ciel.</p>
+    <h2 class="sum-hi">Hello ${esc(address())},</h2>
+    <p class="sum-lead">${canAct()
+      ? `while you were gone I finished ${done} task${done === 1 ? '' : 's'} and kept an eye on Ciel.`
+      : away.length ? 'here’s what I’ve been up to for you.' : 'ask me anything. I can research, calculate, check the weather and set timers.'}</p>
     <ol class="sum-list">${away.map((a, i) => `<li style="--i:${i}"><span class="t">${esc(a.title)}</span><time>${ago(a.at)}</time>${a.detail ? `<span class="d">${esc(a.detail)}</span>` : ''}</li>`).join('')}</ol>
     <p class="sum-flag" id="sum-flag"></p>
-    <div class="sum-ask"><span>${h < 12 ? 'This morning, ask me' : 'Ask me'}</span>${ASK.map(([say, label]) => `<button data-say="${esc(say)}">${esc(label)}</button>`).join('')}</div>`;
+    <div class="sum-ask"><span>${h < 12 ? 'This morning, ask me' : 'Ask me'}</span>${(canAct() ? ASK : ASK_GUEST).map(([say, label]) => `<button data-say="${esc(say)}">${esc(label)}</button>`).join('')}</div>`;
   renderSummaryFlag();
   layout();
 }
 function renderSummaryFlag() {
   const el = $('#sum-flag');
   if (!el) return;
-  const n = waitingCount();
+  const n = canAct() ? waitingCount() : 0;
   el.hidden = !n;
   el.innerHTML = n ? `<button data-sum="approvals">${n === 1 ? 'One approval is' : `${n} approvals are`} waiting for you</button>` : '';
   placeSummary();

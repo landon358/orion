@@ -56,7 +56,7 @@
       <button class="pill-btn glass-pill" id="btn-new-task">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>New task</span>
       </button>
-      <button class="tile round bell" id="btn-approvals" aria-label="Approvals" aria-haspopup="dialog" aria-expanded="false" aria-controls="approvals-pop">
+      <button class="tile round bell" id="btn-approvals" data-owner aria-label="Approvals" aria-haspopup="dialog" aria-expanded="false" aria-controls="approvals-pop">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 9.5a5.5 5.5 0 1 1 11 0c0 4 1.3 5.5 2 6.5h-15c.7-1 2-2.5 2-6.5Z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>
         <span class="tdot" id="approval-dot" hidden></span>
       </button>
@@ -74,7 +74,7 @@
     <a class="rb" href="#/chat" data-route="chat" aria-label="Conversation" data-tip="Conversation">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6.5A2.5 2.5 0 0 1 7.5 4h9A2.5 2.5 0 0 1 19 6.5v7a2.5 2.5 0 0 1-2.5 2.5H11l-4 3.5V16h0.5"/><path d="M5 6.5V14a2 2 0 0 0 2 2"/></svg>
     </a>
-    <a class="rb" href="#/business" data-route="business" aria-label="Business" data-tip="Business">
+    <a class="rb" href="#/business" data-route="business" data-owner aria-label="Business" data-tip="Business">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16"/><path d="M7 16v-4M12 16V7M17 16v-6"/></svg>
     </a>
     <span class="rail-sep"></span>
@@ -201,7 +201,7 @@
     <nav class="drawer-pages" aria-label="Pages">
       <a href="#/" data-route="home">ORION</a>
       <a href="#/chat" data-route="chat">Conversation</a>
-      <a href="#/business" data-route="business">Business</a>
+      <a href="#/business" data-route="business" data-owner>Business</a>
     </nav>
     <div class="segmented" id="segmented" role="tablist">
       <span class="seg-thumb" id="seg-thumb"></span>

@@ -6,7 +6,8 @@
  *
  *   ORION_TOKEN=dev-token node tools/orion-server-example.mjs
  *   then open  http://localhost:8840/?server=ws://localhost:8765&token=dev-token
- *   (or log in with any name and dev-token as the password)
+ *   (or log in with any name and dev-token as the password; a name starting
+ *   with "guest" gets a friend's account instead of the owner's)
  *
  * Env: PORT (8765), ORION_TOKEN (dev-token),
  *      ORION_ORIGINS (comma list; default the GitHub Pages site + localhost:8840)
@@ -114,11 +115,14 @@ function welcome(c) {
   c.send('snapshot', {
     protocol: 1,
     speaks: false,                       // true once ORION streams Kokoro audio itself
-    account: { id: 'owner', name: c.name, role: 'owner', address: 'sir', features: { actions: true, connectors: true, admin: true, watch: true, brief: true, memory: true } },
+    // names starting with "guest" get a friend's account, so both views can be tried
+    account: /^guest/i.test(c.name)
+      ? { id: 'g_example', name: c.name, role: 'guest', address: 'Commander', allowance_left_usd: 0.1, features: { actions: false, connectors: false, admin: false, watch: true, brief: true, memory: true } }
+      : { id: 'owner', name: c.name, role: 'owner', address: 'sir', features: { actions: true, connectors: true, admin: true, watch: true, brief: true, memory: true } },
     state,
     tools,
     tasks: [...tasks.values()],
-    approvals: [...approvals.values()],
+    approvals: /^guest/i.test(c.name) ? [] : [...approvals.values()],
     activity,
     vitals,
     // metrics: omitted, so the business page keeps its labelled sample data
