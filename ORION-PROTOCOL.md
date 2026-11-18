@@ -276,6 +276,28 @@ local brain skipped, or a withdrawn "I cannot" reply handed to Claude):
 
 `id` is the reply message id the tier applies to. `reason` is a short phrase for tooltips.
 
+### `opening`: the first line in the chat box (added 2026-11-18, Landon's request)
+
+When a device connects, the chat box should open with Orion's "while you were away" summary instead of a fixed
+greeting. `snapshot.opening` carries it, and an `opening` event replaces it if a fresher one is produced right after
+connect:
+
+```json
+"opening": { "text": "Evening, Commander. Since 14:02: the tea timer finished and Kyle's watch item fired ...", "at": 1763300000000, "kind": "brief" }
+{ "type": "opening", "data": { "text": "...", "at": 1763300060000, "kind": "brief" } }
+```
+
+- `kind: "brief"`: the account's current "while you were away" summary (local model, free, covers what happened since
+  `last_seen`: alerts, finished timers, routine results, approvals waiting, the watch list; the owner's also notes
+  the memory inbox and today's morning brief). The backend keeps it current in the background while the person is
+  away (regenerated at most every 20 minutes when something new happened), so it is usually ready in the snapshot.
+- `kind: "greeting"`: code-built fallback when no current summary exists ("Evening, Commander. 2 alerts, 1 timer
+  running since 14:02." or "Evening, Commander. Nothing new since you were last here."). A `brief` + `opening` event
+  with `kind: "brief"` follows a few seconds later.
+- Show `opening.text` as Orion's first line in the conversation; on an `opening` event replace that line (it is not
+  a `message`, so nothing is stored in the conversation history). The home page's "while you were gone" card keeps
+  using `brief` as before; the owner's `brief {}` command still returns the morning brief.
+
 ### Everything else
 
 Accounts, login, watch lists, briefs, Local / Local+, the admin view and account management: see `ACCOUNTS.md`.
