@@ -230,16 +230,23 @@
     </form>
   </div>
 
-  <div class="tk-ask" id="tk-ask" role="dialog" aria-modal="true" aria-labelledby="tk-ask-h" hidden>
-    <form class="tk-ask-card" id="tk-ask-form" autocomplete="off">
-      <p class="tk-ask-kind" id="tk-ask-kind"></p>
-      <h2 id="tk-ask-h">Describe your task</h2>
-      <textarea id="tk-ask-in" rows="4" maxlength="600" placeholder="" enterkeyhint="send"></textarea>
-      <div class="tk-ask-foot">
-        <span class="tk-ask-hint" id="tk-ask-hint">Enter to send</span>
-        <button type="button" class="btn secondary" data-ask-cancel>Cancel</button>
-        <button type="submit" class="btn primary">Send</button>
+  <div class="tk-ask" id="tk-ask" role="dialog" aria-modal="true" aria-labelledby="tk-ask-h" aria-describedby="tk-ask-sub" hidden>
+    <form class="tk-ask-card tk-sheet" id="tk-ask-form" autocomplete="off">
+      <span class="tk-grab" aria-hidden="true"></span>
+      <div class="tk-sheet-head">
+        <span class="tk-sheet-ic" id="tk-ask-ic" aria-hidden="true"></span>
+        <div class="tk-sheet-tt"><h2 id="tk-ask-h">New task</h2><p id="tk-ask-sub"></p></div>
+        <button type="button" class="tk-sheet-x" data-ask-cancel aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg></button>
       </div>
+      <div class="tk-field">
+        <textarea id="tk-ask-in" rows="3" maxlength="600" placeholder="What should ORION do?" enterkeyhint="send" aria-labelledby="tk-ask-h"></textarea>
+        <button type="submit" class="tk-go" id="tk-go" aria-label="Send to ORION" aria-disabled="true">
+          <svg class="up" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+          <svg class="ok" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+        </button>
+      </div>
+      <div class="tk-ideas" id="tk-ideas" role="group" aria-label="Ideas"></div>
+      <p class="tk-ask-hint" id="tk-ask-hint" role="status" aria-live="polite"></p>
     </form>
   </div>
 

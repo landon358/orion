@@ -242,6 +242,12 @@ body.dash .stage { opacity: 0; pointer-events: none; }
 .intro-orb canvas, .intro-orbfly canvas { pointer-events: none; display: block; }
 .intro-orbfly { position: fixed; transform-origin: 0 0; pointer-events: none; will-change: transform, opacity; }
 .intro-orbfly i { position: absolute; inset: 0; display: block; }
+/* the ring of light when the opening's sphere locks into its home seat */
+.orb-lock {
+  position: fixed; z-index: 201; pointer-events: none; border-radius: 50%;
+  border: 1.5px solid rgba(240, 205, 130, 0.75);
+  box-shadow: 0 0 24px rgba(240, 195, 109, 0.35), inset 0 0 18px rgba(240, 195, 109, 0.18);
+}
 .intro.on .intro-words .orion-mark.draw path { animation: thread 1.3s cubic-bezier(0.45, 0, 0.2, 1) var(--d, 0s) forwards; }
 /* the login's backdrop: near black, with a warm light pooled round the sphere */
 .intro-bg::before, .intro-bg::after { content: ""; position: absolute; inset: 0; opacity: 0; transition: opacity 1.6s var(--ease-out); pointer-events: none; }
@@ -409,7 +415,8 @@ body.dash .stage { opacity: 0; pointer-events: none; }
   font-size: 0.75rem; font-weight: 500; color: var(--text);
   transition: opacity 0.15s, transform 0.25s var(--spring);
 }
-.rb:hover::after, .rb:focus-visible::after { opacity: 1; transform: translate(0, -50%); transition-delay: 0.25s; }
+.rb:focus-visible::after { opacity: 1; transform: translate(0, -50%); transition-delay: 0.25s; }
+@media (hover: hover) and (pointer: fine) { .rb:hover::after { opacity: 1; transform: translate(0, -50%); transition-delay: 0.25s; } }
 .rail-sep { width: 20px; height: 1px; margin: 4px 0; background: var(--edge-2); flex: none; }
 
 /* ---------- detail panel (right) ---------- */
@@ -698,14 +705,17 @@ body.dash .dock { opacity: 0; pointer-events: none; transform: translateX(-50%) 
 .cloud.want-plus .cloud-ic .r { background: #e7b45a; }
 .cloud.pending .cloud-ic span { animation: pulse 0.9s ease-in-out infinite; }
 /* opening spins the circle half a turn as it hands over to the slider; closing spins it back */
-.cloud:hover .cloud-ic, .cloud:focus-within .cloud-ic { rotate: 180deg; }
+.cloud:focus-within .cloud-ic { rotate: 180deg; }
+/* hover-to-open only with a real mouse: on a phone a tap would only fake the hover (and iOS then eats the tap) */
+@media (hover: hover) and (pointer: fine) { .cloud:hover .cloud-ic { rotate: 180deg; } }
 .cloud-sw {
   position: relative; display: inline-grid; grid-template-columns: 1fr 1fr; padding: 3px; border-radius: 999px; height: 36px; align-items: center;
   background: rgba(0, 0, 0, 0.32); border: 1px solid var(--edge-2); cursor: pointer;
   max-width: 36px; overflow: hidden; opacity: 0; pointer-events: none;
   transition: max-width 0.5s var(--ease-drawer), opacity 0.3s var(--ease-drawer);
 }
-.cloud:hover .cloud-sw, .cloud:focus-within .cloud-sw { max-width: 170px; opacity: 1; pointer-events: auto; }
+.cloud:focus-within .cloud-sw { max-width: 170px; opacity: 1; pointer-events: auto; }
+@media (hover: hover) and (pointer: fine) { .cloud:hover .cloud-sw { max-width: 170px; opacity: 1; pointer-events: auto; } }
 .cloud-dot { transition: opacity 0.5s var(--ease-drawer), scale 0.6s var(--ease-drawer); }
 .cloud:focus-within .cloud-dot { opacity: 0; scale: 0.7; }
 @media (hover: hover) and (pointer: fine) { .cloud:hover .cloud-dot { opacity: 0; scale: 0.7; } }
@@ -870,7 +880,8 @@ body.dash .dock { opacity: 0; pointer-events: none; transform: translateX(-50%) 
 .watch-t { font-size: 0.9375rem; line-height: 1.4; }
 .watch-x { width: 28px; height: 28px; margin-top: -4px; display: grid; place-items: center; border-radius: 8px; color: var(--text-3); opacity: 0.6; transition: opacity 0.15s, color 0.15s, background 0.15s; }
 .watch-x svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
-.watch-item:hover .watch-x, .watch-x:focus-visible { opacity: 1; }
+.watch-x:focus-visible { opacity: 1; }
+@media (hover: hover) and (pointer: fine) { .watch-item:hover .watch-x { opacity: 1; } }
 .watch-x:hover { color: var(--coral); background: rgba(255, 255, 255, 0.05); }
 .watch-empty { padding: 14px; }
 .watch-meta { margin: -4px 4px 16px; font: 400 0.6875rem/1.5 var(--mono); color: var(--text-3); }
@@ -1721,7 +1732,8 @@ body.chat .feed-inner { max-width: 720px; gap: 34px; }
 .tk-time { flex: 0 0 58px; font: 500 0.9375rem var(--mono); color: var(--amber); font-variant-numeric: tabular-nums; }
 .tk-x { flex: 0 0 auto; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 999px; color: var(--text-3); opacity: 0.55; transition: opacity 0.2s, background 0.2s, color 0.2s; }
 .tk-x svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
-.tk-item:hover .tk-x, .tk-x:focus-visible { opacity: 1; }
+.tk-x:focus-visible { opacity: 1; }
+@media (hover: hover) and (pointer: fine) { .tk-item:hover .tk-x { opacity: 1; } }
 .tk-x:hover { background: rgba(236, 111, 94, 0.12); color: var(--coral, #ec6f5e); }
 .tk-empty { padding: 22px 4px; color: var(--text-3); font-size: 0.9375rem; }
 .tk-sub { margin: 30px 4px 2px; font-size: 0.8125rem; font-weight: 500; color: var(--text-3); letter-spacing: 0.01em; }
@@ -1779,7 +1791,6 @@ body.chat .feed-inner { max-width: 720px; gap: 34px; }
   transform: translateY(12px) scale(0.98); transition: transform 0.4s var(--spring);
 }
 .tk-ask.on .tk-ask-card { transform: none; }
-.tk-ask-kind { font-size: 0.8125rem; color: var(--amber); margin-bottom: 4px; }
 .tk-ask-card h2 { font-size: 1.375rem; margin-bottom: 16px; }
 .tk-ask-card textarea {
   width: 100%; resize: none; padding: 14px 16px; border-radius: 18px;
@@ -1801,6 +1812,78 @@ body.chat .feed-inner { max-width: 720px; gap: 34px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .drawer, .drawer.open, .tk-ask-card { transform: none !important; }
+}
+
+/* the task sheet: icon header, one field with send inside, tap-to-fill ideas */
+#tk-ask .tk-sheet {
+  padding: 20px 20px 16px;
+  background: linear-gradient(180deg, #211d18, #161411 70%);
+}
+.tk-grab { display: none; }
+.tk-sheet-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 18px; }
+.tk-sheet-ic {
+  flex: none; width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center;
+  color: var(--gold-l);
+  background: radial-gradient(120% 120% at 30% 15%, rgba(240, 195, 109, 0.24), rgba(240, 195, 109, 0.05));
+  border: 1px solid rgba(240, 195, 109, 0.22); box-shadow: var(--hi);
+}
+.tk-sheet-ic svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.tk-sheet-tt { flex: 1; min-width: 0; padding-top: 1px; }
+#tk-ask .tk-sheet h2 { font-size: 1.1875rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.25; margin: 0 0 4px; }
+.tk-sheet-tt p { margin: 0; font-size: 0.875rem; line-height: 1.4; color: var(--text-2); }
+.tk-sheet-x {
+  flex: none; width: 36px; height: 36px; margin: -2px -4px 0 0; border-radius: 50%;
+  display: grid; place-items: center; color: var(--text-2); background: var(--fill); border: 1px solid var(--edge);
+  transition: transform 0.16s var(--ease-out), color 0.2s;
+}
+.tk-sheet-x svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.tk-field {
+  position: relative; border-radius: 20px; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--edge);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.tk-field:focus-within { border-color: rgba(246, 223, 174, 0.34); box-shadow: 0 0 0 4px rgba(246, 223, 174, 0.05); }
+#tk-ask .tk-field textarea,
+#tk-ask .tk-field textarea:focus {
+  display: block; min-height: 108px; padding: 14px 62px 14px 16px;
+  background: transparent; border: 0; border-radius: 20px; box-shadow: none;
+}
+.tk-go {
+  position: absolute; right: 10px; bottom: 10px; width: 42px; height: 42px; border-radius: 50%;
+  display: grid; place-items: center; color: var(--ink); background: var(--paper);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  transition: transform 0.16s var(--ease-out), opacity 0.2s, background-color 0.2s;
+}
+.tk-go[aria-disabled="true"] { opacity: 0.32; box-shadow: none; }
+.tk-go svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.tk-go .ok, .tk-ask.sent .tk-go .up { display: none; }
+.tk-ask.sent .tk-go .ok { display: block; }
+.tk-ask.sent .tk-go { background: var(--gold-l); opacity: 1; }
+.tk-go:active, .tk-sheet-x:active { transform: scale(0.94); transition-duration: 0.1s; }
+.tk-ideas { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.tk-idea {
+  height: 36px; padding: 0 14px; border-radius: 999px; white-space: nowrap;
+  font: 400 0.8125rem/1 var(--font); color: var(--text-2);
+  background: var(--fill); border: 1px solid var(--edge);
+  transition: transform 0.16s var(--ease-out), color 0.2s, border-color 0.2s;
+}
+.tk-idea:active { transform: scale(0.97); transition-duration: 0.1s; }
+#tk-ask .tk-ask-hint { min-height: 1em; margin: 12px 2px 0; font-size: 0.75rem; }
+#tk-ask .tk-ask-hint:empty { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .tk-idea:hover { color: var(--text); border-color: var(--edge-2); }
+  .tk-sheet-x:hover { color: var(--text); }
+}
+@media (max-width: 640px) {
+  #tk-ask { grid-template-columns: minmax(0, 1fr); }
+  #tk-ask .tk-sheet { min-width: 0; padding: 10px 20px calc(16px + var(--sab)); border-width: 1px 0 0; }
+  .tk-grab { display: block; width: 36px; height: 5px; margin: 0 auto 16px; border-radius: 3px; background: rgba(255, 255, 255, 0.18); }
+  /* one swipeable row of ideas instead of a tall stack */
+  .tk-ideas {
+    flex-wrap: nowrap; overflow-x: auto; margin: 14px -20px 0; padding: 0 20px;
+    scrollbar-width: none; -webkit-mask: linear-gradient(90deg, transparent, #000 20px, #000 calc(100% - 20px), transparent);
+  }
+  .tk-ideas::-webkit-scrollbar { display: none; }
+  .tk-idea { flex: none; }
 }
 
 /* vitals inside ORION's retro panel */
@@ -2004,6 +2087,17 @@ body.chat .feed-inner { max-width: 720px; gap: 34px; }
   /* Business and Admin: a still warm gradient instead of the 3D shader, which is too heavy for a phone */
   .shader { background: radial-gradient(120% 55% at 15% 0%, rgba(214, 150, 70, 0.16), transparent 62%), radial-gradient(90% 45% at 100% 100%, rgba(224, 128, 111, 0.07), transparent 60%); }
   body.dash .shader { opacity: 1; }
+  /* no Local / Local+ switch in the conversation on a phone */
+  body.chat .cloud { display: none; }
+  /* buttons sized for a thumb: 44 px targets (Apple's minimum), larger icons */
+  .tile.round, .conn { width: 44px; height: 44px; }
+  .tile svg { width: 21px; height: 21px; }
+  .round-btn, .send { width: 44px; height: 44px; }
+  .round-btn svg, .send svg { width: 20px; height: 20px; }
+  .dock-row { gap: 8px; }
+  .cloud-dot { width: 44px; height: 44px; }
+  .cloud-sw { height: 44px; }
+  .tk-x, .watch-x { width: 40px; height: 40px; }
   /* the composer's gold ring only turns while you type; at rest it's still (no repaint every frame) */
   .composer::before, .composer::after { animation-play-state: paused; }
   .composer.focus::before, .composer.focus::after { animation-play-state: running; }

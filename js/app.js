@@ -161,7 +161,9 @@ function layout() {
       }
     } else {
       // ORION page: centred in the window, between the top bar and the composer
-      const free = innerHeight - topH - (dockH + 40);
+      // the box's own top (offsetTop skips its entrance transform), so the middle is the gap you see
+      const dockTop = $('.dock')?.offsetTop || innerHeight - dockH - 40;
+      const free = dockTop - topH;
       const size = Math.max(160, Math.min(400, free * 0.7, (innerWidth - right) * 0.42));
       box = { left: (innerWidth - right - size) / 2, top: topH + (free - size) / 2, width: size, height: size };
     }
@@ -196,7 +198,7 @@ function placeOrbPhone(topH, dockH) {
   const at = orbPh.at = { big, size, cy, w, small: false };
   clearTimeout(orbPh.timer);
   const still = (styles) => { o.style.transition = 'none'; Object.assign(o.style, styles); void o.offsetWidth; o.style.transition = ''; };
-  const box = (d, y) => ({ left: `${Math.round((innerWidth - d) / 2)}px`, top: `${(y - d / 2).toFixed(1)}px`, width: `${d}px`, height: `${d}px` });
+  const box = (d, y) => ({ left: `${((innerWidth - d) / 2).toFixed(1)}px`, top: `${(y - d / 2).toFixed(1)}px`, width: `${d}px`, height: `${d}px` });
   const scaled = (y, d) => ({ ...box(big, big / 2), transform: `translateY(${(y - big / 2).toFixed(1)}px) scale(${(d / big).toFixed(4)})` });
   const settle = () => { if (orbPh.at === at) { still({ ...box(size, cy), transform: 'none' }); at.small = true; } };
   if (prev?.small && size !== big && prev.big === big) { settle(); return; }   // the keyboard in the conversation: snap
@@ -208,6 +210,51 @@ function placeOrbPhone(topH, dockH) {
     if (instant) settle(); else orbPh.timer = setTimeout(settle, 340);
   }
 }
+
+/* phones: the spheres lean with the phone. Tilt is measured from how you're holding it, and that
+   resting angle drifts after you over a few seconds, so lying in bed or standing both start level. */
+(() => {
+  if (!matchMedia('(pointer: coarse)').matches || !('DeviceOrientationEvent' in window)) return;
+  let base = null, last = 0;
+  const T = Orbit.tilt, LIM = 28;               // degrees of tip that reach the full lean
+  const soft = (v) => Math.max(-1, Math.min(1, v / LIM));
+  const onTilt = (e) => {
+    if (e.beta == null || e.gamma == null) return;
+    // turn the reading so x/y stay "toward you" and "sideways" whichever way the phone is turned
+    const ang = screen.orientation?.angle ?? window.orientation ?? 0;
+    let fb = e.beta, lr = e.gamma;
+    if (ang === 90) [fb, lr] = [-e.gamma, e.beta];
+    else if (ang === -90 || ang === 270) [fb, lr] = [e.gamma, -e.beta];
+    else if (ang === 180) [fb, lr] = [-e.beta, -e.gamma];
+    const now = performance.now(), dt = Math.min(0.2, (now - (last || now)) / 1000);
+    last = now;
+    if (!base) base = { fb, lr };
+    const k = 1 - Math.exp(-dt / 3.5);
+    base.fb += (fb - base.fb) * k;
+    base.lr += (lr - base.lr) * k;
+    T.x = soft(fb - base.fb) * 0.32;
+    T.y = soft(lr - base.lr) * 0.5;
+  };
+  const listen = () => addEventListener('deviceorientation', onTilt);
+  const DOE = window.DeviceOrientationEvent;
+  if (typeof DOE.requestPermission !== 'function') return listen();   // Android: no prompt needed
+  // iPhone: Safari only asks inside a tap; ask once, on the first one, and take a no for this visit
+  let asked = false;
+  try { asked = sessionStorage.getItem('orion-tilt') === 'no'; } catch { /* storage off */ }
+  if (asked) return;
+  const ask = () => {
+    if (asked) return;
+    asked = true;
+    removeEventListener('touchend', ask);
+    removeEventListener('click', ask, true);
+    DOE.requestPermission().then((r) => {
+      if (r === 'granted') listen();
+      else try { sessionStorage.setItem('orion-tilt', 'no'); } catch { /* storage off */ }
+    }, () => {});
+  };
+  addEventListener('touchend', ask, { passive: true });
+  addEventListener('click', ask, true);
+})();
 
 /* phones: size the app to the visible screen. iOS keeps the page as tall as the screen when the keyboard opens
    and scrolls it instead, which pushed the top bar and ORION out of view; this follows the visible part. */
@@ -1088,13 +1135,18 @@ input.addEventListener('keydown', (e) => {
 });
 // on a phone the box drops to one line while the keyboard is up, so the conversation keeps the room
 input.addEventListener('focus', () => { $('#composer').classList.add('focus'); if (!isWide()) { body.classList.add('typing'); layout(); } });
-input.addEventListener('blur', () => { $('#composer').classList.remove('focus'); if (body.classList.contains('typing')) { body.classList.remove('typing'); layout(); } });
+// leaving the box: wait until the tap that took focus away has landed before the page re-lays out,
+// or the button under the finger moves and the tap misses (it took a second tap)
+input.addEventListener('blur', () => {
+  $('#composer').classList.remove('focus');
+  setTimeout(() => { if (document.activeElement !== input && body.classList.contains('typing')) { body.classList.remove('typing'); layout(); } }, 350);
+});
 // The send button is a plain button, not a form submit: a <form> round the box makes iOS show its
 // passwords / cards / location bar over the keyboard. Pressing a dock button doesn't take focus
 // from the box either, so the keyboard stays put and nothing moves under the finger mid-tap.
 const sendBtn = $('#btn-send');
 $('#composer').addEventListener('mousedown', (e) => {
-  if (document.activeElement === input && e.target.closest('.dock-row button')) e.preventDefault();
+  if (document.activeElement === input && e.target.closest('.dock-row button') && !e.target.closest('.cloud')) e.preventDefault();
 });
 let sentAt = 0;
 sendBtn.addEventListener('touchend', (e) => {
@@ -1624,23 +1676,37 @@ client.on('watch', (w) => {
 });
 
 /* ---------- Describe your task ---------- */
+const KIND_IC = {
+  always: '<svg viewBox="0 0 24 24"><path d="M7.2 9C5.4 9 4 10.3 4 12s1.4 3 3.2 3c3.6 0 6-6 9.6-6 1.8 0 3.2 1.3 3.2 3s-1.4 3-3.2 3c-3.6 0-6-6-9.6-6z"/></svg>',
+  daily: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/></svg>',
+  scheduled: '<svg viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="14.5" rx="3"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></svg>',
+};
 const KINDS = {
-  always: { kind: 'Always', place: 'Tell me if a Ciel order hasn’t shipped in 3 days',
+  always: { title: () => 'Watch for something', sub: 'ORION keeps checking and tells you the moment it happens.',
+    ideas: ['Tell me if a Ciel order hasn’t shipped in 3 days', 'Alert me if ad spend passes $50 in a day', 'Let me know when a new review comes in'],
     note: () => '[New task · Always: keep checking this and tell me when it happens]' },
-  daily: { kind: 'Daily', place: 'Every morning at 7, sum up last night’s orders',
+  daily: { title: () => 'Do it every day', sub: 'ORION does it once a day, at the time you say.',
+    ideas: ['Every morning at 7, sum up last night’s orders', 'Each morning, check yesterday’s ad results', 'At 9 pm, list what’s still open for tomorrow'],
     note: () => '[New task · Daily: do this every day]' },
-  scheduled: { kind: 'Scheduled', place: 'Remind me to order winter samples',
+  scheduled: { title: (day) => `Plan for ${longDay(day)}`, sub: 'ORION files it on that day and reminds you.',
+    ideas: ['Remind me to order winter samples', 'Check the holiday code is live', 'Follow up on the reprint'],
     note: (day) => `[New task · Scheduled for ${new Date(day).toLocaleDateString('en-US', { weekday: 'long' })} ${isoDay(day)}]` },
 };
-const ask = $('#tk-ask'), askIn = $('#tk-ask-in');
+const ask = $('#tk-ask'), askIn = $('#tk-ask-in'), askGo = $('#tk-go');
+const fineHint = matchMedia('(hover: hover) and (pointer: fine)').matches ? 'Enter to send · Shift+Enter for a new line' : '';
+const askReady = () => askGo.setAttribute('aria-disabled', String(!askIn.value.trim()));
 function openAsk(tab) {
   const a = KINDS[tab];
   ui.askTab = tab;
   ui.askDay = ui.cal.sel;
-  $('#tk-ask-kind').textContent = tab === 'scheduled' ? `${a.kind} · ${longDay(ui.askDay)}` : a.kind;
-  askIn.placeholder = a.place;
+  $('#tk-ask-ic').innerHTML = KIND_IC[tab];
+  $('#tk-ask-h').textContent = a.title(ui.askDay);
+  $('#tk-ask-sub').textContent = a.sub;
+  $('#tk-ideas').innerHTML = a.ideas.map((t) => `<button type="button" class="tk-idea">${esc(t)}</button>`).join('');
+  $('#tk-ideas').scrollLeft = 0;
   askIn.value = '';
-  $('#tk-ask-hint').textContent = 'Enter to send';
+  askReady();
+  $('#tk-ask-hint').textContent = fineHint;
   ask.classList.remove('sent');
   ask.hidden = false;
   requestAnimationFrame(() => { ask.classList.add('on'); askIn.focus(); });
@@ -1652,7 +1718,7 @@ function closeAsk() {
 }
 function sendAsk() {
   const text = askIn.value.trim();
-  if (!text) return askIn.focus();
+  if (!text || ask.classList.contains('sent')) return askIn.focus();
   // the request goes out as a normal message; stay here instead of jumping to the conversation
   ui.quietSend = true;
   client.send(`${KINDS[ui.askTab].note(ui.askDay)} ${text}`, { task: ui.askTab === 'scheduled' ? { kind: 'scheduled', date: isoDay(ui.askDay) } : { kind: ui.askTab } });
@@ -1661,6 +1727,15 @@ function sendAsk() {
   haptic(10);
   setTimeout(closeAsk, 700);
 }
+askIn.addEventListener('input', askReady);
+$('#tk-ideas').addEventListener('click', (e) => {
+  const b = e.target.closest('.tk-idea'); if (!b) return;
+  askIn.value = b.textContent;
+  askReady();
+  askIn.focus();
+  askIn.setSelectionRange(askIn.value.length, askIn.value.length);
+  haptic(4);
+});
 $('#tk-ask-form').addEventListener('submit', (e) => { e.preventDefault(); sendAsk(); });
 askIn.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendAsk(); }

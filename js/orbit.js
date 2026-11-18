@@ -69,6 +69,10 @@ const AXIS_A = norm([0.18, 1, 0.05]);         // near-horizontal rings
 const AXIS_B0 = norm([1, 0.42, -0.25]);       // the crossing family, ~70° away
 
 export class Orbit {
+  /** How the phone is tipped, shared by every sphere: x tips it toward or away from you, y turns it
+   *  left or right, both in radians. app.js fills it from the motion sensor; each sphere eases after it. */
+  static tilt = { x: 0, y: 0 };
+
   /**
    * @param {HTMLElement} host
    * @param {{ weave?: boolean }} [opts] weave: the opening's sphere, a denser lattice of three-strand
@@ -101,6 +105,7 @@ export class Orbit {
     this.deep = 0;                            // eased 0–1 toward that deeper orange
     this.wave = 0; this.waveT = 0;            // the ring wave
     this.gaze = 0; this.gazeOn = false; this.gazeFrom = 0;   // looking at you
+    this.tx = 0; this.ty = 0;                 // the phone's tilt, eased
     this.p = Object.fromEntries(KEYS.map((k, i) => [k, LOOK.idle[i]]));
     this.reveal = 1;                          // 0–1: how much of each ring is drawn (the opening stitches them in)
     this.dead = false;
@@ -178,6 +183,10 @@ export class Orbit {
     if (this.gazeOn && held > 1.4 && !['thinking', 'working'].includes(this.state)) this.gazeOn = false;
     if (this.gazeOn && held > 30) this.gazeOn = false;
     this.gaze += ((this.gazeOn ? 1 : 0) - this.gaze) * (1 - Math.exp(-dt / (this.gazeOn ? 0.32 : 0.7)));
+    // follow the phone's tilt with a little weight, like something hung in liquid
+    const kt = 1 - Math.exp(-dt / 0.22);
+    this.tx += ((reduced.matches ? 0 : Orbit.tilt.x) - this.tx) * kt;
+    this.ty += ((reduced.matches ? 0 : Orbit.tilt.y) - this.ty) * kt;
     if (!reduced.matches) {
       this.yaw += dt * this.p.turn * (1 + 2.4 * (1 - clamp(this.reveal, 0, 1)) ** 2);   // spins up while it's drawn
       this.offA += dt * this.p.flowA;
@@ -193,16 +202,17 @@ export class Orbit {
   /* ---------- drawing ---------- */
 
   #resize() {
-    const dpr = Math.min(devicePixelRatio || 1, 2);
     const W = this.host.clientWidth, H = this.host.clientHeight;
+    // a small sphere is cheap to draw, so it gets the screen's full sharpness (3x on an iPhone)
+    const dpr = Math.min(devicePixelRatio || 1, Math.min(W, H) < 120 ? 3 : 2);
     if (!W || !H) return;
     this.W = W; this.H = H; this.dpr = dpr;
     this.cv.width = Math.round(W * dpr); this.cv.height = Math.round(H * dpr);
     this.cv.style.width = `${W}px`; this.cv.style.height = `${H}px`;
     // fewer rings, fewer segments when the sphere is small
     const m = Math.min(W, H);
-    this.rings = this.weave ? 17 : m < 90 ? 7 : m < 200 ? 13 : 19;
-    this.segs = this.weave ? 144 : m < 90 ? 36 : 72;
+    this.rings = this.weave ? 17 : m < 90 ? 10 : m < 200 ? 13 : 19;
+    this.segs = this.weave ? 144 : m < 90 ? 60 : 72;
     this.trig = Array.from({ length: this.segs + 1 }, (_, i) => [Math.cos((i / this.segs) * TAU), Math.sin((i / this.segs) * TAU)]);
   }
 
@@ -254,7 +264,8 @@ export class Orbit {
     const busy = clamp(p.scan, 0, 1);
 
     // a faint body of light inside the sphere
-    const body = ctx.createRadialGradient(cx - R * 0.25, cy - R * 0.3, R * 0.05, cx, cy, R * 1.15);
+    // the light inside slides the other way as the phone tips, so the sphere reads as a solid thing
+    const body = ctx.createRadialGradient(cx - R * (0.25 + this.ty * 0.5), cy - R * (0.3 - this.tx * 0.5), R * 0.05, cx, cy, R * 1.15);
     const rv = clamp(this.reveal, 0, 1);
     body.addColorStop(0, `hsla(${this.hue},80%,55%,${((0.07 + 0.07 * busy + 0.06 * this.lvl) * rv * rv).toFixed(3)})`);
     body.addColorStop(1, `hsla(${this.hue},80%,40%,0)`);
@@ -262,8 +273,8 @@ export class Orbit {
     ctx.fillRect(0, 0, W, H);
 
     // the view: turn about the vertical, then tip toward us
-    const cyw = Math.cos(this.yaw), syw = Math.sin(this.yaw);
-    const TILT = -0.38, ct = Math.cos(TILT), st = Math.sin(TILT);
+    const cyw = Math.cos(this.yaw + this.ty), syw = Math.sin(this.yaw + this.ty);
+    const TILT = -0.38 + this.tx, ct = Math.cos(TILT), st = Math.sin(TILT);
     const view = (x, y, z) => {
       const x1 = x * cyw + z * syw, z1 = -x * syw + z * cyw;
       return [x1, y * ct - z1 * st, y * st + z1 * ct];

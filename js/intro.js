@@ -17,6 +17,8 @@ import { Orbit } from './orbit.js';
 
 const GLIDE = 'cubic-bezier(0.5, 0, 0.15, 1)';
 const SOFT = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
+const LAND = 'cubic-bezier(0.45, 0, 0.1, 1)';      // a long, even glide that slows right into its seat
+const SETTLE = 'cubic-bezier(0.33, 1, 0.68, 1)';
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 const BRAND = { strands: 3, spread: 1.6 };      // must match the top-bar logo so the hand-off is seamless
 const VB = { x: 0, y: 10, w: 524 };             // the top-bar logo's viewBox
@@ -40,6 +42,7 @@ export async function playIntro({ brand, force = false, gate = null } = {}) {
   document.body.append(el);
 
   let skipped = false;
+  let orbLanded = null;
   const wakers = new Set();
   const wait = (ms) => new Promise((r) => {
     if (skipped) return r();
@@ -157,13 +160,36 @@ export async function playIntro({ brand, force = false, gate = null } = {}) {
     Object.assign(orbHost.style, { top: '0px', width: `${orbD}px`, height: `${orbD}px` });
     wrap.append(orbHost);
     el.append(wrap);
-    // the home sphere's radius (see Orbit #geom), so the two line up as one fades into the other
+    // the home sphere's radius (see Orbit #geom), so the two line up as one hands over to the other
     const homeR = (Math.min(home.width, home.height) / 2) * (document.body.classList.contains('orb-side') ? 0.8 : 0.84);
     const k0 = r.width / orbD, k1 = homeR / (orbD / 2 * 0.84);
     const dx = home.left + home.width / 2 - (orbD * k1) / 2 - r.left, dy = home.top + home.height / 2 - (orbD * k1) / 2 - r.top;
     const ms = Dur * 1.15;
-    wrap.animate([{ transform: `scale(${k0})` }, { transform: `translate(${dx}px, ${dy}px) scale(${k1})` }], { duration: ms, delay: 120, easing: GLIDE, fill: 'both' });
-    wrap.animate([{ opacity: 1 }, { opacity: 1, offset: 0.62 }, { opacity: 0 }], { duration: ms + 200, delay: 120, easing: 'ease-in-out', fill: 'both' });
+    // only one sphere on screen: the home one stays hidden until this one lands on it
+    const cv = document.querySelector('#orbit canvas');
+    const hold = cv?.animate([{ opacity: 0 }, { opacity: 0 }], { duration: ms + 120, fill: 'forwards' });
+    const end = `translate(${dx}px, ${dy}px) scale(${k1})`;
+    const glide = wrap.animate([{ transform: `scale(${k0})` }, { transform: end }], { duration: ms, delay: 120, easing: LAND, fill: 'both' });
+    orbLanded = glide.finished.then(() => {
+      // the lock: both spheres take the same small settle (a touch big, a touch small, home) while
+      // the flyer dissolves into the home sphere, and a ring of light pushes out from it
+      const SET = 560;
+      const settle = [{ transform: 'scale(1.05)' }, { transform: 'scale(0.985)', offset: 0.45 }, { transform: 'scale(1)' }];
+      hold?.cancel();
+      cv?.animate(settle, { duration: SET, easing: SETTLE });
+      cv?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'linear' });
+      orbHost.animate([{ transform: 'scale(1.05)' }, { transform: 'scale(0.985)' }], { duration: 240, easing: SETTLE, fill: 'both' });
+      wrap.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 240, easing: 'linear', fill: 'both' });
+      const cx = home.left + home.width / 2, cy = home.top + home.height / 2 - sh;
+      const ring = document.createElement('div');
+      ring.className = 'orb-lock';
+      Object.assign(ring.style, { left: `${cx - homeR}px`, top: `${cy - homeR}px`, width: `${homeR * 2}px`, height: `${homeR * 2}px` });
+      document.body.append(ring);
+      ring.animate([{ transform: 'scale(0.96)', opacity: 0.7 }, { transform: 'scale(1.42)', opacity: 0 }], { duration: 720, easing: 'cubic-bezier(0.23, 1, 0.32, 1)', fill: 'both' })
+        .finished.then(() => ring.remove(), () => ring.remove());
+      navigator.vibrate?.(8);
+      return new Promise((res) => setTimeout(res, 240));
+    }, () => hold?.cancel());
   };
 
   /** With a login, the sphere glides down into its seat above the form and stays there, alive. */
@@ -265,6 +291,7 @@ export async function playIntro({ brand, force = false, gate = null } = {}) {
   el.querySelector('.intro-bg').animate([{ opacity: 1 }, { opacity: 0 }], { duration: gate ? (still ? 0 : 1000) : fast ? Dur : 1000, easing: 'ease-in-out', fill: 'both' });
   document.body.classList.add('intro-out');
   await new Promise((r) => setTimeout(r, gate ? (still ? 40 : 1000 + 4 * 40 + 40) : fast ? Dur + 40 : Dur + 4 * 70 - 120));
+  await orbLanded?.catch(() => {});
   document.body.classList.remove('intro-run', 'intro-out');
   orb.stop();
   el.remove();
