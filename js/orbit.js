@@ -215,7 +215,8 @@ export class Orbit {
     if (!this.W) return false;
     const r = this.cv.getBoundingClientRect();
     const { cx, cy, R } = this.#geom();
-    return Math.hypot(e.clientX - r.left - cx, e.clientY - r.top - cy) <= R * 1.05;
+    const k = r.width / this.W || 1;            // the host may be scaled (phones move the sphere with a transform)
+    return Math.hypot(e.clientX - r.left - cx * k, e.clientY - r.top - cy * k) <= R * k * 1.05;
   }
 
   /** How bright ring `d` (its plane's offset, -1..1) of a family is right now. */

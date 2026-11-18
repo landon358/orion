@@ -126,6 +126,7 @@ const orbit = new Orbit($('#orbit'));
 /* layout                                                           */
 /* ================================================================ */
 
+const orbPh = { at: null, timer: 0, maxH: 0, w: 0 };
 function layout() {
   const dockH = $('#dock').offsetHeight;
   root.style.setProperty('--dock-h', `${dockH}px`);
@@ -164,25 +165,67 @@ function layout() {
       const size = Math.max(160, Math.min(400, free * 0.7, (innerWidth - right) * 0.42));
       box = { left: (innerWidth - right - size) / 2, top: topH + (free - size) / 2, width: size, height: size };
     }
-    Object.assign($('#orbit').style, { left: `${box.left}px`, top: `${box.top}px`, width: `${Math.max(0, box.width)}px`, height: `${Math.max(0, box.height)}px` });
+    Object.assign($('#orbit').style, { left: `${box.left}px`, top: `${box.top}px`, width: `${Math.max(0, box.width)}px`, height: `${Math.max(0, box.height)}px`, transform: '' });
+    orbPh.at = null;
     body.classList.toggle('orb-side', side);
     orbit.retro = side;
   } else {
     body.classList.remove('orb-side');
-    $('#orbit').removeAttribute('style');
+    placeOrbPhone(topH, dockH);
   }
   placeSummary();
 }
 new ResizeObserver(layout).observe($('#dock'));
 
+/** Phones: the sphere glides between pages as one layer: its box stays at the ORION-page size and only
+ *  a transform moves and scales it, so nothing is laid out or redrawn at a new size mid-glide. Once it
+ *  has landed small in the conversation, the box itself shrinks to that size (one resize), so a 50 px
+ *  sphere isn't drawn at full size every frame; it swaps back to the big box before gliding home.
+ *  The keyboard never shrinks the big box (it's sized from the tallest the screen has been). */
+function placeOrbPhone(topH, dockH) {
+  const o = $('#orbit');
+  const appH = window.visualViewport?.height ?? innerHeight;
+  if (innerWidth !== orbPh.w) { orbPh.w = innerWidth; orbPh.maxH = 0; }
+  orbPh.maxH = Math.max(orbPh.maxH, appH);
+  const big = Math.round(Math.max(60, Math.min(196, innerWidth * 0.5, (orbPh.maxH - topH - dockH) * 0.84)));
+  const size = ui.route === 'chat' ? (body.classList.contains('typing') ? 36 : 50) : big;
+  const cy = $('#stage').clientHeight / 2;
+  const prev = orbPh.at;
+  if (prev && prev.big === big && prev.size === size && Math.abs(prev.cy - cy) < 0.5) return;
+  const at = orbPh.at = { big, size, cy, small: false };
+  clearTimeout(orbPh.timer);
+  const still = (styles) => { o.style.transition = 'none'; Object.assign(o.style, styles); void o.offsetWidth; o.style.transition = ''; };
+  const box = (d, y) => ({ left: `${Math.round((innerWidth - d) / 2)}px`, top: `${(y - d / 2).toFixed(1)}px`, width: `${d}px`, height: `${d}px` });
+  const scaled = (y, d) => ({ ...box(big, big / 2), transform: `translateY(${(y - big / 2).toFixed(1)}px) scale(${(d / big).toFixed(4)})` });
+  const settle = () => { if (orbPh.at === at) { still({ ...box(size, cy), transform: 'none' }); at.small = true; } };
+  if (prev?.small && size !== big && prev.big === big) { settle(); return; }   // the keyboard in the conversation: snap
+  if (prev?.small) still(scaled(prev.cy, prev.size));                        // back to the big box, looking unchanged
+  else if (!prev) still(scaled(cy, size));                                    // first placement: no glide
+  Object.assign(o.style, scaled(cy, size));
+  if (size !== big) {
+    const instant = !prev || !body.classList.contains('settled') || reduced.matches;
+    if (instant) settle(); else orbPh.timer = setTimeout(settle, 340);
+  }
+}
+
 /* phones: size the app to the visible screen. iOS keeps the page as tall as the screen when the keyboard opens
    and scrolls it instead, which pushed the top bar and ORION out of view; this follows the visible part. */
 const vv = window.visualViewport;
+// iOS only shows :active press states once the page listens for touches; this empty listener turns them on
+document.addEventListener('touchstart', () => {}, { passive: true });
+let fitH = -1, fitTop = -1;
 function fitViewport() {
-  if (!vv || isWide()) { root.style.removeProperty('--app-h'); root.style.removeProperty('--vv-top'); return; }
-  root.style.setProperty('--app-h', `${Math.round(vv.height)}px`);
-  root.style.setProperty('--vv-top', `${Math.round(vv.offsetTop)}px`);
-  if (ui.route === 'chat') { const f = $('#feed'); f.scrollTop = f.scrollHeight; }     // keep the latest words in view above the keyboard
+  if (!vv || isWide()) { fitH = fitTop = -1; root.style.removeProperty('--app-h'); root.style.removeProperty('--vv-top'); return; }
+  const h = Math.round(vv.height), t = Math.round(vv.offsetTop);
+  if (h === fitH && t === fitTop) return;          // iOS fires these every frame while scrolling: only act on a real change
+  const grew = h !== fitH;
+  fitH = h; fitTop = t;
+  root.style.setProperty('--app-h', `${h}px`);
+  root.style.setProperty('--vv-top', `${t}px`);
+  if (grew) {
+    layout();
+    if (ui.route === 'chat') { const f = $('#feed'); f.scrollTop = f.scrollHeight; }   // keep the latest words in view above the keyboard
+  }
 }
 vv?.addEventListener('resize', fitViewport);
 vv?.addEventListener('scroll', fitViewport);
@@ -336,7 +379,7 @@ $('#btn-detail-close').addEventListener('click', () => setDetail(false));
     if (!dragging) return;
     const raw = e.clientY - y0;
     dy = raw < 0 ? rubber(raw, 200) : raw;
-    root.style.setProperty('--detail-drag', `${dy}px`);
+    el.style.transform = `translateY(${dy.toFixed(1)}px)`;   // on the sheet itself, not a page-wide variable
     hist.push([e.timeStamp, e.clientY]); if (hist.length > 5) hist.shift();
   });
   const end = () => {
@@ -344,8 +387,8 @@ $('#btn-detail-close').addEventListener('click', () => setDetail(false));
     dragging = false; el.classList.remove('dragging');
     const [t0, a] = hist[0], [t1, b] = hist.at(-1);
     const v = t1 > t0 ? ((b - a) / (t1 - t0)) * 1000 : 0;
+    el.style.transform = '';                 // hand back to the stylesheet's transition: settle or slide away
     if (dy + project(v) > el.offsetHeight * 0.35) setDetail(false);
-    else root.style.setProperty('--detail-drag', '0px');
   };
   grab.addEventListener('pointerup', end);
   grab.addEventListener('pointercancel', end);
@@ -605,6 +648,7 @@ function addUserMessage(m) {
   const w = document.createElement('div');
   w.className = 'working';
   w.innerHTML = '<span class="lamps" aria-hidden="true"><i></i><i></i><i></i></span><span class="w-label">Thinking…</span>';
+  if (ui.route === 'chat') w.classList.add('fresh');
   feedInner.append(w);
   ui.turn = { el: w, steps: [], tools: new Set(), at: performance.now() };
   orbit.look();
@@ -628,7 +672,7 @@ function showHomeQ(text) {
     { opacity: 0, transform: `translateY(${dy}px) scale(0.96)`, offset: 0 },
     { opacity: 1, offset: 0.35 },
     { opacity: 1, transform: 'none' },
-  ], { duration: 620, easing: 'cubic-bezier(.2,.9,.25,1)' });
+  ], { duration: 270, easing: EASE_OUT });
 }
 /** Where the bubble's words start, read while it's still showing (before the page changes). */
 function homeQSpot() {
@@ -647,6 +691,7 @@ function handOffHomeQ(toChat, from) {
 homeQ.addEventListener('click', () => go('chat'));
 
 /* The words you typed lift out of the composer and settle as your bubble. */
+const EASE_OUT = getComputedStyle(root).getPropertyValue('--ease-out').trim() || 'cubic-bezier(0.23, 1, 0.32, 1)';
 const FLY_PROPS = ['font-size', 'font-weight', 'line-height', 'letter-spacing', 'color', 'padding', 'border-radius', 'background-color', 'border', 'box-shadow', 'backdrop-filter'];
 function fly(el, from, solid = false) {
   el.style.animation = 'none';
@@ -665,13 +710,13 @@ function fly(el, from, solid = false) {
     { transform: `translate(${dx}px, ${dy}px)`, backgroundColor: 'rgba(0,0,0,0)', borderColor: 'rgba(0,0,0,0)', boxShadow: 'none', offset: 0 },
     { backgroundColor: 'rgba(0,0,0,0)', offset: 0.25 },
     { transform: 'none', offset: 1 },
-  ], { duration: solid ? 640 : 720, easing: 'cubic-bezier(.2,.9,.25,1)' });
+  ], { duration: 300, easing: EASE_OUT });
   // the conversation may scroll while the words are in the air: keep the landing spot on them
   let live = true;
   const follow = () => {
     if (!live) return;
     const now = el.getBoundingClientRect();
-    c.style.left = `${now.left}px`; c.style.top = `${now.top}px`;
+    c.style.translate = `${(now.left - to.left).toFixed(1)}px ${(now.top - to.top).toFixed(1)}px`;   // composited, no layout
     requestAnimationFrame(follow);
   };
   requestAnimationFrame(follow);
@@ -702,7 +747,7 @@ function upsertLeoMessage(m) {
     $('button.meta', el)?.addEventListener('click', (e) => e.currentTarget.setAttribute('aria-expanded', String(el.classList.toggle('open'))));
     ui.lastLeo?.classList.remove('live');
     el.classList.add('live');
-    ui.lastLeo = el;
+    ui.lastLeo = el;          // no entrance: it takes the place of the "Thinking…" line that already rose in
     feedInner.append(el);
     ui.messages.set(m.id, el);
     // asked from the ORION page: he thought there on the big sphere; now his answer opens the conversation
@@ -1038,8 +1083,8 @@ input.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submitCompose(); }
 });
 // on a phone the box drops to one line while the keyboard is up, so the conversation keeps the room
-input.addEventListener('focus', () => { $('#composer').classList.add('focus'); if (!isWide()) body.classList.add('typing'); });
-input.addEventListener('blur', () => { $('#composer').classList.remove('focus'); body.classList.remove('typing'); });
+input.addEventListener('focus', () => { $('#composer').classList.add('focus'); if (!isWide()) { body.classList.add('typing'); layout(); } });
+input.addEventListener('blur', () => { $('#composer').classList.remove('focus'); if (body.classList.contains('typing')) { body.classList.remove('typing'); layout(); } });
 // The send button is a plain button, not a form submit: a <form> round the box makes iOS show its
 // passwords / cards / location bar over the keyboard. Pressing a dock button doesn't take focus
 // from the box either, so the keyboard stays put and nothing moves under the finger mid-tap.
@@ -1786,7 +1831,7 @@ function enterChat(instant) {
   const kids = [...feedInner.children];
   kids.forEach((k, i) => k.style.setProperty('--i', String(Math.max(0, i - (kids.length - 8)))));
   feedInner.classList.remove('entering');
-  if (!instant && !reduced.matches) {
+  if (!instant && !reduced.matches && isWide()) {
     void feedInner.offsetWidth;
     feedInner.classList.add('entering');
     clearTimeout(ui.enterT);

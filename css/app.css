@@ -46,6 +46,11 @@
   --map-h: 38svh;
   --dock-w: min(640px, max(460px, calc(100vw - var(--rw) - 420px)));
   --spring: cubic-bezier(0.2, 0.9, 0.25, 1);
+  /* the motion curves: a strong ease-out for things arriving, ease-in-out for things moving on
+     screen, and the iOS drawer curve. Everything else uses these, not hand-typed beziers. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: var(--ease-drawer);
   --chat-l: 300px;    /* the column of tools on the left while chatting */
 }
 
@@ -110,12 +115,12 @@ body.guest .stats { grid-template-columns: repeat(3, 1fr); }
   border: 1px solid var(--glass-edge);
   box-shadow: var(--hi);
   color: var(--text-2);
-  transition: background 0.15s, color 0.15s, transform 0.1s;
+  transition: background 0.15s, color 0.15s, transform 0.16s var(--ease-out);
 }
 .tile.round { width: 44px; height: 44px; border-radius: 50%; }
 .tile svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .tile:hover { color: var(--text); background: rgba(255, 255, 255, 0.12); }
-.tile:active { transform: scale(0.94); transition-duration: 0.05s; }
+.tile:active { transform: scale(0.96); transition-duration: 0.1s; }
 .tile.on { color: var(--ink); background: var(--paper); border-color: transparent; }
 .tile.ghost { background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
 .tile.ghost:hover { background: var(--fill-2); }
@@ -139,12 +144,12 @@ body.guest .stats { grid-template-columns: repeat(3, 1fr); }
   font-size: 0.8125rem; font-weight: 500;
   color: var(--text);
   white-space: nowrap;
-  transition: background 0.15s, transform 0.1s;
+  transition: background 0.15s, transform 0.16s var(--ease-out);
 }
 .chip svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; color: var(--text-2); }
 .chip .chev { width: 13px; height: 13px; }
 .chip:hover { background: var(--fill-2); }
-.chip:active { transform: scale(0.96); }
+.chip:active { transform: scale(0.96); transition-duration: 0.1s; }
 .chip-sm { font: 500 0.6875rem/1 var(--mono); padding: 5px 8px; border-radius: 999px; background: var(--fill-2); color: var(--text-2); }
 
 .badge {
@@ -174,9 +179,9 @@ body.guest .stats { grid-template-columns: repeat(3, 1fr); }
 .btn {
   height: 36px; padding: 0 16px; border-radius: 999px;
   font-size: 0.875rem; font-weight: 500;
-  transition: transform 0.1s, background 0.15s;
+  transition: transform 0.16s var(--ease-out), background 0.15s;
 }
-.btn:active { transform: scale(0.96); }
+.btn:active { transform: scale(0.96); transition-duration: 0.1s; }
 .btn.primary { background: var(--paper); color: var(--ink); }
 .btn.secondary { background: var(--fill-2); color: var(--text); border: 1px solid var(--edge-2); }
 .text-btn { color: var(--gold-l); font-weight: 500; font-size: 0.875rem; }
@@ -239,7 +244,7 @@ body.dash .stage { opacity: 0; pointer-events: none; }
 .intro-orbfly i { position: absolute; inset: 0; display: block; }
 .intro.on .intro-words .orion-mark.draw path { animation: thread 1.3s cubic-bezier(0.45, 0, 0.2, 1) var(--d, 0s) forwards; }
 /* the login's backdrop: near black, with a warm light pooled round the sphere */
-.intro-bg::before, .intro-bg::after { content: ""; position: absolute; inset: 0; opacity: 0; transition: opacity 1.6s cubic-bezier(0.22, 1, 0.36, 1); pointer-events: none; }
+.intro-bg::before, .intro-bg::after { content: ""; position: absolute; inset: 0; opacity: 0; transition: opacity 1.6s var(--ease-out); pointer-events: none; }
 .intro-bg::before {
   background:
     radial-gradient(42% 34% at 50% 34%, rgba(214, 160, 80, 0.14), transparent 70%),
@@ -282,7 +287,7 @@ body.dash .stage { opacity: 0; pointer-events: none; }
 .gf-lb {
   position: absolute; left: 50px; top: 31px; translate: 0 -50%; transform-origin: 0 50%; pointer-events: none;
   font: 400 15.5px/1 var(--font); color: rgba(255, 255, 255, 0.5);
-  transition: top 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), color 0.2s;
+  transition: top 0.22s var(--ease-out), transform 0.22s var(--ease-out), color 0.2s;
 }
 .gf-in:focus + .gf-lb, .gf-in:not(:placeholder-shown) + .gf-lb, .gf-in:-webkit-autofill + .gf-lb { top: 19px; transform: scale(0.76); color: rgba(255, 255, 255, 0.6); }
 .gf-in:focus + .gf-lb { color: rgba(255, 255, 255, 0.85); }
@@ -298,10 +303,12 @@ body.dash .stage { opacity: 0; pointer-events: none; }
   background: #fff; border: 1px solid #fff;
   transition: background 0.2s, color 0.2s, border-color 0.2s, opacity 0.2s, transform 0.12s;
 }
-.gg-i { display: grid; place-items: center; width: 18px; height: 18px; transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.gg-i { display: grid; place-items: center; width: 18px; height: 18px; transition: transform 0.25s var(--ease-out); }
 .gg-i svg { stroke-width: 1.9; }
-.gate-go:not(:disabled):hover { background: #ececec; }
-.gate-go:not(:disabled):hover .gg-i { transform: translateX(3px); }
+@media (hover: hover) and (pointer: fine) {
+  .gate-go:not(:disabled):hover { background: #ececec; }
+  .gate-go:not(:disabled):hover .gg-i { transform: translateX(3px); }
+}
 .gate-go:not(:disabled):active { transform: scale(0.985); }
 .gate-go:focus-visible { outline: 2px solid rgba(255, 255, 255, 0.7); outline-offset: 3px; }
 .gate-go:disabled { cursor: default; color: rgba(255, 255, 255, 0.4); background: rgba(255, 255, 255, 0.04); border-color: rgba(255, 255, 255, 0.08); }
@@ -328,7 +335,7 @@ body.dash .stage { opacity: 0; pointer-events: none; }
 .intro-flyer svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 0 5px rgba(214, 170, 90, 0.35)); }
 .intro-flyer path { vector-effect: non-scaling-stroke; stroke-width: 1; }
 /* the app settles in behind the logo */
-.intro-out .topbar, .intro-out .dock, .intro-out .rail, .intro-out .summary { animation: settle 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.intro-out .topbar, .intro-out .dock, .intro-out .rail, .intro-out .summary { animation: settle 0.9s var(--ease-out) both; }
 @keyframes settle { from { opacity: 0; translate: 0 10px; } }
 @media (max-width: 599px) { .intro-words { font-size: 64px; font-weight: 300; } }
 .welcome-text b { font-weight: 500; font-size: 0.9375rem; letter-spacing: -0.005em; white-space: nowrap; }
@@ -338,11 +345,11 @@ body.dash .stage { opacity: 0; pointer-events: none; }
 .pill-btn {
   height: 44px; padding: 0 18px 0 14px; display: inline-flex; align-items: center; gap: 8px;
   font-size: 0.875rem; font-weight: 500;
-  transition: background 0.15s, transform 0.1s;
+  transition: background 0.15s, transform 0.16s var(--ease-out);
 }
 .pill-btn svg { width: 16px; height: 16px; fill: none; stroke: var(--gold-l); stroke-width: 1.8; stroke-linecap: round; }
 .pill-btn:hover { background: linear-gradient(180deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.05)); }
-.pill-btn:active { transform: scale(0.96); }
+.pill-btn:active { transform: scale(0.96); transition-duration: 0.1s; }
 .bell.on { color: var(--ink); background: var(--paper); }
 .conn {
   width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%;
@@ -386,11 +393,11 @@ body.dash .stage { opacity: 0; pointer-events: none; }
   text-decoration: none;
   position: relative; width: 42px; height: 42px; flex: none; border-radius: 50%;
   display: grid; place-items: center; color: var(--text-2);
-  transition: background 0.18s, color 0.18s, transform 0.1s, box-shadow 0.25s;
+  transition: background 0.18s, color 0.18s, transform 0.16s var(--ease-out), box-shadow 0.25s;
 }
 .rb svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .rb:hover { color: var(--text); background: rgba(255, 255, 255, 0.09); }
-.rb:active { transform: scale(0.92); transition-duration: 0.05s; }
+.rb:active { transform: scale(0.96); transition-duration: 0.1s; }
 .rb.on { background: var(--paper); color: var(--ink); box-shadow: 0 0 22px rgba(246, 236, 214, 0.25); }
 .rb:disabled { opacity: 0.35; cursor: default; }
 .rb:disabled:hover { background: none; color: var(--text-2); }
@@ -444,11 +451,11 @@ body.dash .stage { opacity: 0; pointer-events: none; }
   height: 34px; padding: 0 12px 0 14px; display: inline-flex; align-items: center; gap: 8px;
   border-radius: 999px; background: var(--paper); color: var(--ink);
   font-size: 0.8125rem; font-weight: 500; white-space: nowrap;
-  transition: background 0.15s, transform 0.1s;
+  transition: background 0.15s, transform 0.16s var(--ease-out);
 }
 .explore svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .explore:hover { background: #fffaf0; }
-.explore:active { transform: scale(0.96); }
+.explore:active { transform: scale(0.96); transition-duration: 0.1s; }
 
 .metric {
   margin-top: 12px; padding: 14px 14px 12px;
@@ -525,7 +532,9 @@ body.chat .convo-head { width: 100%; max-width: 808px; margin: 0 auto; padding: 
 body.chat .convo-head h2 { display: none; }
 body.chat .feed { padding: 18px 24px 36px; -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 22px, #000 calc(100% - 26px), transparent); mask-image: linear-gradient(180deg, transparent 0, #000 22px, #000 calc(100% - 26px), transparent); }
 body.chat .feed-inner { max-width: 760px; margin: 0 auto; gap: 26px; }
-body.chat .feed-inner.entering > * { animation: rise 0.6s var(--spring) both; animation-delay: calc(0.22s + var(--i, 0) * 0.05s); }
+@media (min-width: 900px) { body.chat .feed-inner.entering > * { animation: rise 0.6s var(--spring) both; animation-delay: calc(0.22s + var(--i, 0) * 0.05s); } }
+/* on a phone the history is just there when you open the conversation; only a new reply rises in */
+.convo .msg.fresh, .convo .working.fresh { animation: rise 0.24s var(--ease-out) both; }
 /* Claude-style: ORION speaks as plain text, you speak in a bubble */
 .convo .msg.leo { background: none; border: 0; padding: 0; border-radius: 0; overflow: visible; }
 .convo .msg.leo.live { background: none; }
@@ -607,10 +616,10 @@ body.dash .dock { opacity: 0; pointer-events: none; transform: translateX(-50%) 
   background: var(--glass-bg);
   -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
   border: 1px solid var(--glass-edge); box-shadow: var(--hi), 0 10px 26px rgba(0, 0, 0, 0.3);
-  transition: background 0.2s, border-color 0.2s, transform 0.1s;
+  transition: background 0.2s, border-color 0.2s, transform 0.16s var(--ease-out);
 }
 .stat:hover { background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05)); }
-.stat:active { transform: scale(0.97); }
+.stat:active { transform: scale(0.97); transition-duration: 0.1s; }
 .stat.on { border-color: rgba(239, 226, 196, 0.34); }
 .stat.on::before { content: ""; position: absolute; left: 14px; right: 14px; top: -1px; height: 1px; background: linear-gradient(90deg, transparent, var(--pale), transparent); }
 .s-label { display: block; font-size: 0.6875rem; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -682,7 +691,7 @@ body.dash .dock { opacity: 0; pointer-events: none; transform: translateX(-50%) 
 .cloud-ic {
   width: 14px; height: 14px; border-radius: 50%; overflow: hidden; display: flex;
   box-shadow: inset 0 0 0 1px rgba(246, 236, 214, 0.35);
-  transition: rotate 0.6s cubic-bezier(0.32, 0.72, 0, 1);
+  transition: rotate 0.6s var(--ease-drawer);
 }
 .cloud-ic span { flex: 1; transition: background 0.4s; }
 .cloud:not(.want-plus) .cloud-ic .l { background: rgba(246, 236, 214, 0.75); }
@@ -691,25 +700,25 @@ body.dash .dock { opacity: 0; pointer-events: none; transform: translateX(-50%) 
 /* opening spins the circle half a turn as it hands over to the slider; closing spins it back */
 .cloud:hover .cloud-ic, .cloud:focus-within .cloud-ic { rotate: 180deg; }
 .cloud-sw {
-  --ease: cubic-bezier(0.32, 0.72, 0, 1);
   position: relative; display: inline-grid; grid-template-columns: 1fr 1fr; padding: 3px; border-radius: 999px; height: 36px; align-items: center;
   background: rgba(0, 0, 0, 0.32); border: 1px solid var(--edge-2); cursor: pointer;
   max-width: 36px; overflow: hidden; opacity: 0; pointer-events: none;
-  transition: max-width 0.5s var(--ease), opacity 0.3s var(--ease);
+  transition: max-width 0.5s var(--ease-drawer), opacity 0.3s var(--ease-drawer);
 }
 .cloud:hover .cloud-sw, .cloud:focus-within .cloud-sw { max-width: 170px; opacity: 1; pointer-events: auto; }
-.cloud-dot { transition: opacity 0.5s cubic-bezier(0.32, 0.72, 0, 1), scale 0.6s cubic-bezier(0.32, 0.72, 0, 1); }
-.cloud:hover .cloud-dot, .cloud:focus-within .cloud-dot { opacity: 0; scale: 0.7; }
+.cloud-dot { transition: opacity 0.5s var(--ease-drawer), scale 0.6s var(--ease-drawer); }
+.cloud:focus-within .cloud-dot { opacity: 0; scale: 0.7; }
+@media (hover: hover) and (pointer: fine) { .cloud:hover .cloud-dot { opacity: 0; scale: 0.7; } }
 /* the thumb slides between the two halves */
 .cloud-thumb {
   position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); border-radius: 999px;
   background: rgba(246, 236, 214, 0.13);
-  transition: translate 0.45s var(--ease), background 0.45s var(--ease);
+  transition: translate 0.45s var(--ease-drawer), background 0.45s var(--ease-drawer);
 }
 .cloud.want-plus .cloud-thumb { translate: 100% 0; background: rgba(231, 180, 90, 0.24); }
 .cloud-sw button {
   position: relative; height: 28px; padding: 0 12px; border-radius: 999px; white-space: nowrap; background: none;
-  font: 500 0.8125rem/1 var(--font); color: var(--text-3); transition: color 0.45s var(--ease);
+  font: 500 0.8125rem/1 var(--font); color: var(--text-3); transition: color 0.45s var(--ease-drawer);
 }
 .cloud-sw button[aria-checked="true"] { color: var(--text); }
 .cloud-sw button[data-cloud="1"][aria-checked="true"] { color: var(--gold-l); }
@@ -723,11 +732,11 @@ body.dash .dock { opacity: 0; pointer-events: none; transform: translateX(-50%) 
   width: 36px; height: 36px; flex: none; border-radius: 50%;
   display: grid; place-items: center; color: var(--text-2);
   background: rgba(255, 255, 255, 0.05); border: 1px solid var(--edge-2);
-  transition: background 0.15s, color 0.15s, transform 0.1s, box-shadow 0.25s;
+  transition: background 0.15s, color 0.15s, transform 0.16s var(--ease-out), box-shadow 0.25s;
 }
 .round-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .round-btn:hover { color: var(--text); background: rgba(255, 255, 255, 0.1); }
-.round-btn:active { transform: scale(0.92); }
+.round-btn:active { transform: scale(0.96); transition-duration: 0.1s; }
 .voice-btn.on { color: #241806; border-color: transparent; background: radial-gradient(circle at 38% 30%, #fff3d4, #e2c07a 55%, #a87a30); box-shadow: 0 0 22px rgba(214, 180, 106, 0.5); }
 .round-btn.end { color: var(--coral); }
 .dock-row .chip { height: 34px; }
@@ -737,10 +746,10 @@ body.dash .dock { opacity: 0; pointer-events: none; transform: translateX(-50%) 
   display: grid; place-items: center;
   background: var(--paper); color: var(--ink);
   box-shadow: 0 0 18px rgba(246, 236, 214, 0.28);
-  transition: transform 0.1s, background 0.2s, color 0.2s, box-shadow 0.25s;
+  transition: transform 0.16s var(--ease-out), background 0.2s, color 0.2s, box-shadow 0.25s;
 }
 .send svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.send:active { transform: scale(0.92); }
+.send:active { transform: scale(0.96); transition-duration: 0.1s; }
 .send:disabled, .send[aria-disabled="true"] { background: rgba(255, 255, 255, 0.07); color: var(--text-3); box-shadow: none; cursor: default; }
 
 .state-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--text-3); box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.05); }
@@ -1261,7 +1270,7 @@ body.business #biz, body.admin #adm { opacity: 1; visibility: visible; transform
   .brand { height: 30px; margin: 0 4px; }
   .tb-right { gap: 8px; }
   .tile.round, .conn { width: 40px; height: 40px; }
-  .stage { top: var(--top-h); bottom: auto; height: var(--map-h); transition: height 0.45s var(--spring); }
+  .stage { top: var(--top-h); bottom: auto; height: var(--map-h); }
   .stage::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 28px; background: linear-gradient(transparent, rgba(10, 10, 10, 0.9)); pointer-events: none; }
 
   .convo {
@@ -1308,7 +1317,7 @@ body.business #biz, body.admin #adm { opacity: 1; visibility: visible; transform
     border-radius: 28px 28px 0 0; border-bottom: 0;
     transform: translateY(105%); opacity: 1;
     padding-bottom: var(--sab);
-    transition: transform 0.5s var(--spring);
+    transition: transform 0.4s var(--ease-drawer);
   }
   .detail-open .detail { transform: translateY(var(--detail-drag, 0px)); }
   .detail.dragging { transition: none; }
@@ -1327,7 +1336,12 @@ body.business #biz, body.admin #adm { opacity: 1; visibility: visible; transform
 /* =========================================================== */
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+  /* gentler, not none: things still fade (short), but nothing moves, slides or loops */
+  *, *::before, *::after {
+    transition-property: opacity, color, background-color, border-color, box-shadow, visibility !important;
+    transition-duration: 0.18s !important; transition-delay: 0s !important;
+    animation-duration: 0.01ms !important; animation-iteration-count: 1 !important;
+  }
   .composer::before, .composer::after { animation: none !important; --a: 30deg; }
   .detail, .drawer, .approvals-pop, .convo { transition: opacity 0.2s !important; }
 }
@@ -1906,18 +1920,18 @@ body.chat .feed-inner { max-width: 720px; gap: 34px; }
   /* the envelope sits bare like the bell, not in a circle */
   #btn-email { background: none; border-color: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none; }
 
-  /* ORION's sphere has one explicit size per page (--orb), so going from the ORION page to the
-     conversation is one smooth glide: it shrinks and rises into the head of the conversation */
-  body { --orb: 52px; }
-  body.home { --orb: min(196px, 50vw, calc(var(--map-h) * 0.84)); }
-  body.chat { --map-h: 60px; --orb: 50px; }
-  body.chat.typing { --map-h: 44px; --orb: 36px; }
+  /* ORION's sphere keeps its ORION-page size and is only moved and scaled as one layer
+     (app.js sets its transform), so the glide into the conversation never re-lays out or redraws
+     the canvas at a new size */
+  body.chat { --map-h: 60px; }
+  body.chat.typing { --map-h: 44px; }
   body[class] .orbit {
-    inset: auto; margin: 0;
-    left: calc(50% - var(--orb) / 2); top: calc((var(--map-h) - var(--orb)) / 2);
-    width: var(--orb); height: var(--orb);
-    transition: left 0.62s var(--spring), top 0.62s var(--spring), width 0.62s var(--spring), height 0.62s var(--spring), opacity 0.4s;
+    inset: auto; margin: 0; transform-origin: 50% 50%; will-change: transform;
+    transition: transform 0.3s var(--ease-out), opacity 0.4s;
   }
+  /* in the conversation the little sphere is the way back: it gives under the finger */
+  body.chat .orbit canvas { transition: transform 0.16s var(--ease-out); }
+  body.chat .orbit:active canvas { transform: scale(0.95); transition-duration: 0.1s; }
   .stage::after { display: none; }
 
   /* asked from the ORION page: your words wait in a bubble at the lower right while he thinks */
@@ -1932,7 +1946,10 @@ body.chat .feed-inner { max-width: 720px; gap: 34px; }
   .home-q[hidden], body:not(.home) .home-q { display: none; }
 
   /* the conversation: the back link shares the row with the sphere, the words get the rest */
-  body.chat .convo { top: calc(var(--top-h) + var(--map-h)); bottom: var(--dock-h); transition: opacity 0.25s, top 0.45s var(--spring); }
+  body.chat .convo { top: calc(var(--top-h) + var(--map-h)); bottom: var(--dock-h); }
+  /* the conversation settles in from just below and sinks back as you leave, with the sphere */
+  .convo { transition: opacity 0.22s var(--ease-out), transform 0.3s var(--ease-out); }
+  body:not(.chat) .convo { transform: translateY(18px); transition: opacity 0.2s var(--ease-out), transform 0.3s var(--ease-out), visibility 0s 0.3s; }
   body.chat .convo-head {
     position: fixed; z-index: 3; top: var(--top-h); left: 6px; right: auto; width: auto;
     height: var(--map-h); padding: 0; margin: 0; display: flex; align-items: center;
@@ -1987,6 +2004,10 @@ body.chat .feed-inner { max-width: 720px; gap: 34px; }
   /* Business and Admin: a still warm gradient instead of the 3D shader, which is too heavy for a phone */
   .shader { background: radial-gradient(120% 55% at 15% 0%, rgba(214, 150, 70, 0.16), transparent 62%), radial-gradient(90% 45% at 100% 100%, rgba(224, 128, 111, 0.07), transparent 60%); }
   body.dash .shader { opacity: 1; }
+  /* the composer's gold ring only turns while you type; at rest it's still (no repaint every frame) */
+  .composer::before, .composer::after { animation-play-state: paused; }
+  .composer.focus::before, .composer.focus::after { animation-play-state: running; }
+  body.business #biz, body.admin #adm { transition: opacity 0.25s var(--ease-out), transform 0.3s var(--ease-out), visibility 0s; }
 }
 @media (min-width: 900px) { .dt-phone, .drawer-sec { display: none; } }
 @media (min-width: 900px) { .home-q { display: none; } }
