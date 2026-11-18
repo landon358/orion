@@ -60,6 +60,47 @@ This file is the hand-off list between them. Each item names its owner. Update i
 - Files Orion made: HTTP `GET /files` and `GET /files/download?path=` exist (owner token). A socket frame listing new
   files (`files {items}`) could be added if the UI wants a panel.
 
+- **Requested by the UI (2026-11-17), shapes in ORION-PROTOCOL.md "Proposed":** (1) `every`/`next`/`due` on
+  routine, timer and reminder tasks, so the new Tasks page's Daily and Scheduled tabs fill in; (2) the
+  "Describe your task" `send` with a `task {kind, date?}` hint: always -> watch item, daily -> routine,
+  scheduled -> dated reminder any distance ahead; (3) `files_list` / `file_get` -> `files` / `file` for the
+  owner's Files panel; (4) `style_list` / `style_add` / `style_remove` -> `style` for the "Your rules" screen;
+  (5) `images` on `send` for pictures in chat; (6) optional `sources` on the final message; (7) document the
+  `telemetry` fields in the admin snapshot.
+
+- **Email alerts (requested 2026-11-17).** UI is built (pop-up + top-bar button); frames in ORION-PROTOCOL.md
+  "Proposed" 5b. Landon chose email over SMS for everyone. The natural home is a new email channel in
+  `orion/push.py` (same quiet hours, dedupe and "skip while a device is active" logic), but for **every account**,
+  each to their own verified address; push.py's ntfy/SMS stay owner-only. Backend to build:
+  1. **Sending: Resend (changed 2026-11-17, replaces the Gmail plan).** Landon is buying a domain for the web app,
+     so ORION sends from it, e.g. `orion@alerts.<domain>`, display name "ORION", through Resend (free tier: 3,000 a
+     month, 100 a day; expected volume about 50 a week). Setup steps for Landon are in EMAIL-SETUP.md. Backend:
+     - API key in Credential Manager (`Orion-assistant / email:resend_api_key`); `from`, `reply_to` and the site URL
+       in `config.json`. Never in this repo.
+     - Send with one HTTPS call, `POST https://api.resend.com/emails` (Bearer key; `from`, `to`, `subject`, `text`,
+       `html`, `headers` for `List-Unsubscribe`), or the `resend` Python package. One recipient per email, never
+       a shared To/CC. Retry 429/5xx with backoff; log failures to the admin snapshot, never the key.
+     - Add `python orion_connect.py email` to prompt for the key with hidden input and store it, then send a test.
+     - Until the domain is verified, Resend's test sender (`onboarding@resend.dev`) only delivers to the Resend
+       account's own address, so only the owner can be tested; guests start once DNS is verified.
+  2. **Storage:** each account's address, verified flag and on/off in `data/users.json` (PC only, never in this
+     repo). Codes hashed, 15-minute expiry, the rate limits in 5b.
+  3. **What gets emailed:** that account's own `notify` events: watch-list hits, finished timers, due reminders,
+     the owner's "needs your OK" approvals (summary only, never the full preview of a draft), and opt-in reports
+     (Kyle's morning report, if the owner approves the cost; see GUEST-PROFILES.md).
+     Not emailed: chat replies, routine noise, anything for another account.
+  4. **Limits:** at most 3 emails per account per day and 10 a day overall by default (configurable), quiet hours
+     22:00 to 07:00 local (hold and send at 07:00), and bundle anything that arrives within 10 minutes into one
+     email. Skip the email if that account has a device connected and active in the last 2 minutes.
+  5. **The email itself:** plain text plus simple HTML, subject under 60 characters ("ORION: Order #1043 hasn't
+     shipped"), two or three lines, a link to open ORION (the site URL), and a one-click unsubscribe link
+     (`List-Unsubscribe` header + a footer link to an HTTP endpoint on the Funnel that sets `on: false`).
+     Run it through the privacy redaction first. Never include tokens, passwords or login links.
+  6. **Replies:** set `reply_to` to the owner's address (config) for now; ORION doesn't read incoming mail, and
+     emails are never read as commands (anyone can forge a sender).
+  7. **Tests:** code expiry and lockout, guest isolation (one account never triggers another's email), quiet hours,
+     caps, unsubscribe link.
+
 ## Open: UI (this repo's session owns these)
 
 - `js/tools.js` header comment still says 10 bands and lists `shopify` under "older ids": the backend sends 11 bands

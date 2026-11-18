@@ -1,9 +1,10 @@
 /**
- * The opening. Gold threads draw the five letters of ORION. As the name
- * unfolds into "Orchestrated Reasoning & Intelligent Operations Network",
- * each thread letter turns into a solid letter. Then the words fade and the
- * five capitals fly off to their places in the top bar, becoming threads
- * again as they land, while the app appears underneath.
+ * The opening. Gold threads weave the five letters of ORION while, on their
+ * left, the sphere weaves itself in at the same time: ring after ring of
+ * three-strand thread, each with a needle of light at its end, growing from
+ * the middle out to the poles, then a fine dial traced round it. Then the
+ * letters fly off to their places in the top bar and the sphere glides into
+ * its place on the home screen as the app appears underneath.
  * Click or press any key to skip. Once per browser session; tapping the
  * logo in the top bar (or ?intro in the URL) replays it.
  *
@@ -12,16 +13,15 @@
  * `gate(panel)` resolves, ORION glides from there to its place in the top bar.
  */
 import { orionLetters } from './logo.js';
+import { Orbit } from './orbit.js';
 
-const WORDS = [['O', 'rchestrated '], ['R', 'easoning '], ['', '& '], ['I', 'ntelligent '], ['O', 'perations '], ['N', 'etwork']];
-const LINES = [['O', 'rchestrated'], ['R', 'easoning <span class="ampc">&amp;</span>'], ['I', 'ntelligent'], ['O', 'perations'], ['N', 'etwork']];
-const SMOOTH ='cubic-bezier(0.65, 0, 0.35, 1)';
 const GLIDE = 'cubic-bezier(0.5, 0, 0.15, 1)';
 const SOFT = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-const inOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 const BRAND = { strands: 3, spread: 1.6 };      // must match the top-bar logo so the hand-off is seamless
 const VB = { x: 0, y: 10, w: 524 };             // the top-bar logo's viewBox
+const ORB = 1.75;                               // the sphere's size, in cap heights
+const ORB_GAP = 0.34;                           // the space between it and the O, in cap heights
 let running = false;
 
 export async function playIntro({ brand, force = false, gate = null } = {}) {
@@ -31,18 +31,12 @@ export async function playIntro({ brand, force = false, gate = null } = {}) {
   document.body.classList.add('intro-run');
 
   const big = orionLetters({ animate: true });
-  const landing = orionLetters({ ...BRAND, animate: true });
+  const landing = orionLetters(BRAND);
   const el = document.createElement('div');
   el.className = 'intro';
   el.setAttribute('aria-hidden', 'true');
-  // phones stack the words, one per line; wider screens unfold them along one line
-  const stack = innerWidth < 600;
-  let li = 0;
-  const capHtml = (c) => `<span class="cap"><span class="ch">${c}</span>${big[li++].svg}</span>`;
   el.innerHTML = `<div class="intro-bg"></div><div class="intro-glow"></div>
-    <div class="intro-words${stack ? ' stack' : ''}">${stack
-      ? LINES.map(([cap, rest]) => `<span class="iw">${capHtml(cap)}<span class="rest"><span class="rt">${rest}</span></span></span>`).join('')
-      : WORDS.map(([cap, rest]) => `<span class="iw">${cap ? capHtml(cap) : ''}<span class="rest${cap ? '' : ' amp'}"><span class="rt">${rest.replace('&', '&amp;')}</span></span></span>`).join('')}</div>`;
+    <div class="intro-words"><span class="intro-orb"><i></i></span>${big.map((L) => `<span class="cap">${L.svg}</span>`).join('')}</div>`;
   document.body.append(el);
 
   let skipped = false;
@@ -58,11 +52,10 @@ export async function playIntro({ brand, force = false, gate = null } = {}) {
   addEventListener('keydown', skip, { once: true });
 
   const words = el.querySelector('.intro-words');
+  const slot = el.querySelector('.intro-orb');
+  const orbHost = slot.firstElementChild;
   const caps = [...el.querySelectorAll('.cap')];
-  const chars = caps.map((c) => c.querySelector('.ch'));
   const threads = caps.map((c) => c.querySelector('svg'));
-  const rests = [...el.querySelectorAll('.rest')];
-  const texts = rests.map((r) => r.firstElementChild);
   const glow = el.querySelector('.intro-glow');
   const all = [];
   const anim = (node, frames, opts) => { const a = node.animate(frames, { fill: 'both', ...opts }); all.push(a); return a; };
@@ -81,94 +74,43 @@ export async function playIntro({ brand, force = false, gate = null } = {}) {
   const lineH = parseFloat(cs.lineHeight) || F * 1.1;
   const baseY = (lineH - (A + D)) / 2 + A;                   // baseline, from the top of a line box
 
-  // closed: thread letters at logo spacing. open: solid letters, words after them
+  // the sphere sits on the left, centred on the letters' cap height; the threads at logo spacing after it
+  const orbD = Math.round(capH * ORB), orbW = orbD + capH * ORB_GAP;
+  Object.assign(orbHost.style, { width: `${orbD}px`, height: `${orbD}px`, top: `${baseY - capH / 2 - orbD / 2}px` });
+  slot.style.width = `${orbW}px`;
+  const orb = new Orbit(orbHost, { weave: true });
+  orb.reveal = 0;
+  if (location.hostname === 'localhost') window.__intro = { orb };
+
   const cw0 = big.map((L) => (L.x1 - L.x0) * u);
-  const cw1 = chars.map((c) => c.getBoundingClientRect().width);
   const m0 = big.map((L) => L.gap * u);
-  const widths = texts.map((t) => t.getBoundingClientRect().width);
   caps.forEach((c, i) => Object.assign(threads[i].style, { width: `${cw0[i]}px`, height: `${108 * u}px`, top: `${baseY - 104 * u}px` }));
+  caps.forEach((c, i) => { c.style.width = `${cw0[i]}px`; c.style.marginRight = `${m0[i]}px`; });
   const vw = innerWidth;
-  const logoW = cw0.reduce((a, b) => a + b, 0) + m0.reduce((a, b) => a + b, 0);
-  let W0 = 0, W1 = 0, sC = 1, sE = 1, stackFrom = [];
-  if (!stack) {
-    caps.forEach((c, i) => { c.style.width = `${cw0[i]}px`; c.style.marginRight = `${m0[i]}px`; });
-    rests.forEach((r) => { r.style.width = '0px'; });
-    W0 = words.offsetWidth;
-    W1 = W0 - logoW + cw1.reduce((a, b) => a + b, 0) + widths.reduce((a, b) => a + b, 0);
-    sC = Math.min(1, 0.4 * vw / W0);
-    sE = Math.min(sC, 0.86 * vw / W1);
-    words.style.transform = `scale(${sC})`;
-  } else {
-    // a fixed column as wide as the longest line, so nothing shifts as the words grow
-    const colW = Math.max(...[...words.children].map((l) => l.getBoundingClientRect().width));
-    const colH = words.getBoundingClientRect().height;
-    words.style.width = `${colW}px`;
-    sE = Math.min(1, 0.8 * vw / colW, 0.6 * innerHeight / colH);
-    sC = Math.min(1.25, 0.66 * vw / logoW);
-    rests.forEach((r) => { r.style.width = '0px'; });
-    words.style.transform = `scale(${sE})`;
-    // where each capital sits in ORION, centred on screen; it starts there and slides into its line
-    const box = words.getBoundingClientRect();
-    const top = box.top + box.height / 2 + (capH * sC) / 2 - baseY * sC;
-    let x = box.left + box.width / 2 - (logoW * sC) / 2;
-    stackFrom = caps.map((c, i) => {
-      const r = c.getBoundingClientRect();
-      const t = `translate(${((x - r.left) / sE).toFixed(2)}px, ${((top - r.top) / sE).toFixed(2)}px) scale(${(sC / sE).toFixed(4)})`;
-      x += (cw0[i] + m0[i]) * sC;
-      return t;
-    });
-    caps.forEach((c, i) => { c.style.transformOrigin = '0 0'; c.style.transform = stackFrom[i]; });
-  }
+  const sC = Math.min(1, (vw < 600 ? 0.86 : 0.5) * vw / words.offsetWidth);
+  words.style.transform = `scale(${sC})`;
   words.style.visibility = 'visible';
 
-  /** Widths, gaps and zoom from one curve, so the line's on-screen width never overshoots. */
-  const unfold = () => {
-    const v0 = W0 * sC, v1 = W1 * sE;
-    const N = 32, rest = widths.map(() => []), cap = cw0.map(() => []), zoom = [];
-    for (let i = 0; i <= N; i++) {
-      const t = i / N, e = inOut(t);
-      widths.forEach((w, j) => rest[j].push({ width: `${(w * e).toFixed(2)}px`, offset: t }));
-      cw0.forEach((w, j) => cap[j].push({ width: `${(w + (cw1[j] - w) * e).toFixed(2)}px`, marginRight: `${(m0[j] * (1 - e)).toFixed(2)}px`, offset: t }));
-      zoom.push({ transform: `scale(${((v0 + (v1 - v0) * e) / (W0 + (W1 - W0) * e)).toFixed(4)})`, offset: t });
-    }
-    return { rest, cap, zoom };
-  };
+  /** The rings weave in over `ms`, after `delay`, easing out. A skip finishes them at once. */
+  const weave = (ms, delay) => new Promise((r) => {
+    const t0 = performance.now() + delay;
+    const step = (now) => {
+      const t = skipped ? 1 : Math.max(0, Math.min(1, (now - t0) / ms));
+      orb.reveal = 1 - (1 - t) ** 1.6;
+      if (t < 1 && !orb.dead) requestAnimationFrame(step); else r();
+    };
+    requestAnimationFrame(step);
+  });
 
   if (!reduced.matches && !skipped) {
-    // 1. threads draw ORION, letter by letter
+    // 1. threads weave ORION, letter by letter, and the sphere weaves itself in beside them
     el.classList.add('on');
-    anim(glow, [{ opacity: 0, transform: 'scale(0.6)' }, { opacity: 1, transform: 'scale(1)' }], { duration: 2000, easing: SOFT });
-    await wait(1900);
-
-    // 2 (phone). each capital slides into its own line, turning solid, and its word unfolds after it
-    if (!skipped && stack) {
-      caps.forEach((c, i) => anim(c, [{ transform: stackFrom[i] }, { transform: 'none' }], { duration: 1300, delay: i * 80, easing: SMOOTH }));
-      threads.forEach((s, i) => anim(s, [{ opacity: 1, filter: 'blur(0px)' }, { opacity: 0, filter: 'blur(5px)' }], { duration: 700, delay: 200 + i * 80, easing: 'ease-in-out' }));
-      chars.forEach((c, i) => anim(c, [{ opacity: 0, filter: 'blur(5px)' }, { opacity: 1, filter: 'blur(0px)' }], { duration: 800, delay: 300 + i * 80, easing: SOFT }));
-      rests.forEach((r, i) => anim(r, [{ width: '0px' }, { width: `${widths[i]}px` }], { duration: 1000, delay: 700 + i * 90, easing: SMOOTH }));
-      texts.forEach((t, i) => anim(t, [
-        { opacity: 0, filter: 'blur(8px)', transform: 'translateX(-0.25em)' },
-        { opacity: 1, filter: 'blur(0px)', transform: 'none' },
-      ], { duration: 900, delay: 780 + i * 90, easing: SOFT }));
-      await wait(1800 + (gate ? 900 : 1700));
-    }
-
-    // 2. the name unfolds; each thread letter becomes a solid letter
-    if (!skipped && !stack) {
-      const Dur = 1500;
-      const f = unfold();
-      anim(words, f.zoom, { duration: Dur, easing: 'linear' });
-      rests.forEach((r, i) => anim(r, f.rest[i], { duration: Dur, easing: 'linear' }));
-      caps.forEach((c, i) => anim(c, f.cap[i], { duration: Dur, easing: 'linear' }));
-      threads.forEach((s, i) => anim(s, [{ opacity: 1, filter: 'blur(0px)' }, { opacity: 0, filter: 'blur(6px)' }], { duration: 700, delay: 120 + i * 50, easing: 'ease-in-out' }));
-      chars.forEach((c, i) => anim(c, [{ opacity: 0, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0px)' }], { duration: 800, delay: 220 + i * 50, easing: SOFT }));
-      texts.forEach((t, i) => anim(t, [
-        { opacity: 0, filter: 'blur(10px)', transform: 'translateX(-0.25em)' },
-        { opacity: 1, filter: 'blur(0px)', transform: 'none' },
-      ], { duration: 1000, delay: 420 + i * 70, easing: SOFT }));
-      await wait(Dur + (gate ? 900 : 1600));
-    }
+    anim(glow, [{ opacity: 0, transform: 'scale(0.6)' }, { opacity: 1, transform: 'scale(1)' }], { duration: 2200, easing: SOFT });
+    anim(orbHost, [{ opacity: 0, transform: 'scale(0.86) rotate(-24deg)' }, { opacity: 1, transform: 'none' }], { duration: 2400, easing: SOFT });
+    weave(2700, 0);
+    await wait(2700 + (gate ? 700 : 1200));
   }
+  orb.reveal = 1;
 
   // 3. the words fade; the capitals fly to their places (the top bar, or with a login the title
   //    at the top of the screen) and become threads again
@@ -180,39 +122,85 @@ export async function playIntro({ brand, force = false, gate = null } = {}) {
   /** Where each landing letter sits for a logo drawn at box {left, top, width}. */
   const spot = (box, L) => { const ub = box.width / VB.w; return { x: box.left + (L.x0 - VB.x) * ub, y: box.top + (16 - VB.y) * ub, ub }; };
   const title = { width: Math.min(72, innerWidth * 0.2) };
-  Object.assign(title, { left: (innerWidth - title.width) / 2, top: stack ? 30 : 36 });
+  Object.assign(title, { left: (innerWidth - title.width) / 2, top: innerWidth < 600 ? 30 : 36 });
   const dest = gate ? title : target?.getBoundingClientRect();
+
+  /** The sphere glides into its place on the home screen and hands over to it; with a login, or
+   *  when that sphere isn't on screen, it fades where it is. */
+  const flyOrb = (afterLogin = false) => {
+    const r = orbHost.getBoundingClientRect();
+    const home = document.getElementById('orbit')?.getBoundingClientRect();
+    const seen = (!gate || afterLogin) && !still && home && home.width > 40 && home.height > 40 && home.bottom > 0 && home.top < innerHeight;
+    if (!seen) {
+      anim(slot, [{ opacity: 1, filter: 'blur(0px)', transform: 'none' }, { opacity: 0, filter: 'blur(6px)', transform: 'scale(0.85)' }], { duration: still ? 0 : 600, easing: 'ease-in' });
+      return;
+    }
+    const wrap = document.createElement('div');
+    wrap.className = 'intro-orbfly';
+    Object.assign(wrap.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${orbD}px`, height: `${orbD}px` });
+    orbHost.getAnimations().forEach((a) => a.cancel());
+    Object.assign(orbHost.style, { top: '0px', width: `${orbD}px`, height: `${orbD}px` });
+    wrap.append(orbHost);
+    el.append(wrap);
+    // the home sphere's radius (see Orbit #geom), so the two line up as one fades into the other
+    const homeR = (Math.min(home.width, home.height) / 2) * (document.body.classList.contains('orb-side') ? 0.8 : 0.84);
+    const k0 = r.width / orbD, k1 = homeR / (orbD / 2 * 0.84);
+    const dx = home.left + home.width / 2 - (orbD * k1) / 2 - r.left, dy = home.top + home.height / 2 - (orbD * k1) / 2 - r.top;
+    const ms = Dur * 1.15;
+    wrap.animate([{ transform: `scale(${k0})` }, { transform: `translate(${dx}px, ${dy}px) scale(${k1})` }], { duration: ms, delay: 120, easing: GLIDE, fill: 'both' });
+    wrap.animate([{ opacity: 1 }, { opacity: 1, offset: 0.62 }, { opacity: 0 }], { duration: ms + 200, delay: 120, easing: 'ease-in-out', fill: 'both' });
+  };
+
+  /** With a login, the sphere glides down into its seat above the form and stays there, alive. */
+  const seatOrb = async (seat, after) => {
+    const r = orbHost.getBoundingClientRect(), to = seat.getBoundingClientRect();
+    const wrap = document.createElement('div');
+    wrap.className = 'intro-orbfly';
+    Object.assign(wrap.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${orbD}px`, height: `${orbD}px` });
+    orbHost.getAnimations().forEach((a) => a.cancel());
+    orbHost.style.top = '0px';
+    wrap.append(orbHost);
+    el.append(wrap);
+    const k0 = r.width / orbD, k1 = to.width / orbD;
+    const a = wrap.animate([{ transform: `scale(${k0})` }, { transform: `translate(${to.left - r.left}px, ${to.top - r.top}px) scale(${k1})` }],
+      { duration: still ? 0 : 1300, easing: GLIDE, fill: 'both' });
+    await Promise.all([a.finished, after.finished]);
+    Object.assign(orbHost.style, { width: '100%', height: '100%', top: '0px' });
+    seat.append(orbHost);
+    wrap.remove();
+  };
 
   if (!fast || gate) {
     all.forEach((a) => a.finish());
-    threads.forEach((t) => { t.style.opacity = '0'; });
-    chars.forEach((c) => { c.style.opacity = '1'; c.style.filter = 'none'; });
-    texts.forEach((t, i) => anim(t, [{ opacity: 1, filter: 'blur(0px)' }, { opacity: 0, filter: 'blur(10px)' }], { duration: still ? 0 : 420, delay: i * 30, easing: 'ease-in' }));
+    if (!gate) flyOrb();
     if (!gate) glow.animate([{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(0.8)' }], { duration: Dur, easing: 'ease-in', fill: 'both' });
-    const s = sE;
-    chars.forEach((c, i) => {
+    threads.forEach((t, i) => {
       const L = landing[i];
-      const r = c.getBoundingClientRect();
-      // where the solid letter is now (its cap-height box), and where its thread twin lands
-      const sx = r.left, sy = r.top + (baseY - 104 * u) * s;
+      const r = t.getBoundingClientRect();
+      // where the woven letter is now, and where its top-bar twin lands
+      const sx = r.left, sy = r.top;
       const { x: tx, y: ty, ub } = spot(dest, L);
       const tw = (L.x1 - L.x0) * ub, th = 108 * ub;
-      const k = (u * s) / ub;
+      const k = (u * sC) / ub;
       const fly = document.createElement('div');
       fly.className = 'intro-flyer';
       Object.assign(fly.style, { left: `${tx}px`, top: `${ty}px`, width: `${tw}px`, height: `${th}px` });
-      const fs = F * ub / u;                                    // font size whose cap height matches the logo letter
-      fly.innerHTML = `<span class="ch" style="font-size:${fs}px;--lh:${((A + D) / F).toFixed(3)};bottom:${4 * ub - (D / F) * fs}px">${c.textContent}</span>${L.svg}`;
+      // the big letter's threads hand over to the top bar's finer ones on the way
+      const from = t.cloneNode(true);
+      from.classList.remove('draw');
+      from.removeAttribute('style');
+      fly.innerHTML = L.svg;
+      fly.prepend(from);
       el.append(fly);
       flyers.push({ fly, L, tx, ty, ub });
-      c.style.visibility = 'hidden';
+      t.style.visibility = 'hidden';
       const delay = still ? 0 : i * 70;
       fly.animate([
         { transform: `translate(${sx - tx}px, ${sy - ty}px) scale(${k})` },
         { transform: 'none' },
       ], { duration: Dur, delay, easing: GLIDE, fill: 'both' });
-      fly.querySelector('.ch').animate([{ opacity: 1 }, { opacity: 1, offset: 0.35 }, { opacity: 0 }], { duration: Dur * 0.8, delay, easing: 'ease-in-out', fill: 'both' });
-      fly.querySelectorAll('path').forEach((p) => p.animate([{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], { duration: Dur * 0.75, delay: delay + Dur * 0.3, easing: 'cubic-bezier(0.3, 0, 0.2, 1)', fill: 'both' }));
+      from.animate([{ opacity: 1 }, { opacity: 1, offset: 0.25 }, { opacity: 0 }], { duration: Dur * 0.8, delay, easing: 'ease-in-out', fill: 'both' });
+      fly.lastElementChild.animate([{ opacity: 0 }, { opacity: 0, offset: 0.2 }, { opacity: 1 }], { duration: Dur * 0.8, delay, easing: 'ease-in-out', fill: 'both' });
     });
     if (!gate) await new Promise((r) => setTimeout(r, 160));
   } else {
@@ -232,11 +220,19 @@ export async function playIntro({ brand, force = false, gate = null } = {}) {
     const panel = document.createElement('div');
     panel.className = 'gate-wrap';
     el.append(panel);
-    const done = gate(panel);
-    panel.animate([{ opacity: 0, filter: 'blur(8px)', transform: 'translateY(12px)' }, { opacity: 1, filter: 'blur(0px)', transform: 'none' }],
-      { duration: still ? 0 : 800, delay: still ? 0 : Dur * 0.55, easing: SOFT, fill: 'both' });
+    const done = gate(panel, { orb });
+    const show = panel.animate([{ opacity: 0, filter: 'blur(8px)' }, { opacity: 1, filter: 'blur(0px)' }],
+      { duration: still ? 0 : 800, delay: still ? 0 : Dur * 0.45, easing: SOFT, fill: 'both' });
+    if (!still) [...panel.querySelectorAll('[data-rise]')].forEach((n, i) => n.animate(
+      [{ opacity: 0, transform: 'translateY(14px)' }, { opacity: 1, transform: 'none' }],
+      { duration: 900, delay: Dur * 0.45 + 120 + i * 80, easing: SOFT, fill: 'backwards' }));
+    const seat = panel.querySelector('.gate-orb');
+    if (seat) seatOrb(seat, show);
+    else anim(slot, [{ opacity: 1 }, { opacity: 0 }], { duration: still ? 0 : 600 });
 
     await done;
+    orb.setState('idle');
+    if (seat) { await show.finished; flyOrb(true); }
     await panel.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(8px)' }], { duration: still ? 0 : 320, easing: 'ease-in', fill: 'both' }).finished;
     el.setAttribute('aria-hidden', 'true');
 
@@ -255,6 +251,7 @@ export async function playIntro({ brand, force = false, gate = null } = {}) {
   document.body.classList.add('intro-out');
   await new Promise((r) => setTimeout(r, gate ? (still ? 40 : 1000 + 4 * 40 + 40) : fast ? Dur + 40 : Dur + 4 * 70 - 120));
   document.body.classList.remove('intro-run', 'intro-out');
+  orb.stop();
   el.remove();
   removeEventListener('keydown', skip);
   running = false;

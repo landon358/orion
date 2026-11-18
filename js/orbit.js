@@ -69,9 +69,14 @@ const AXIS_A = norm([0.18, 1, 0.05]);         // near-horizontal rings
 const AXIS_B0 = norm([1, 0.42, -0.25]);       // the crossing family, ~70° away
 
 export class Orbit {
-  /** @param {HTMLElement} host */
-  constructor(host) {
+  /**
+   * @param {HTMLElement} host
+   * @param {{ weave?: boolean }} [opts] weave: the opening's sphere, a denser lattice of three-strand
+   *   threads like the letters, with a needle of light at each ring's end while it draws, and a dial round it
+   */
+  constructor(host, opts = {}) {
     this.host = host;
+    this.weave = opts.weave ? 1 : 0;
     this.cv = document.createElement('canvas');
     this.cv.setAttribute('role', 'img');
     this.cv.setAttribute('aria-label', 'ORION');
@@ -97,8 +102,11 @@ export class Orbit {
     this.wave = 0; this.waveT = 0;            // the ring wave
     this.gaze = 0; this.gazeOn = false; this.gazeFrom = 0;   // looking at you
     this.p = Object.fromEntries(KEYS.map((k, i) => [k, LOOK.idle[i]]));
+    this.reveal = 1;                          // 0–1: how much of each ring is drawn (the opening stitches them in)
+    this.dead = false;
 
-    new ResizeObserver(() => this.#resize()).observe(host);
+    this.ro = new ResizeObserver(() => this.#resize());
+    this.ro.observe(host);
     this.#resize();
     this.cv.addEventListener('pointermove', (e) => {
       const inside = this.#inside(e);
@@ -113,6 +121,9 @@ export class Orbit {
   }
 
   /* ---------- API ---------- */
+
+  /** Stop drawing for good (the opening's own sphere, once it has handed over). */
+  stop() { this.dead = true; this.ro.disconnect(); }
 
   setTools() {}                               // the sphere is ORION himself, not his tools
 
@@ -149,6 +160,7 @@ export class Orbit {
   #frame(now) {
     const dt = clamp((now - this.last) / 1000, 0, 0.1);
     this.last = now;
+    if (this.dead) return;
     requestAnimationFrame((n) => this.#frame(n));
     if (this.paused || !this.W) return;
     this.t += dt;
@@ -167,7 +179,7 @@ export class Orbit {
     if (this.gazeOn && held > 30) this.gazeOn = false;
     this.gaze += ((this.gazeOn ? 1 : 0) - this.gaze) * (1 - Math.exp(-dt / (this.gazeOn ? 0.32 : 0.7)));
     if (!reduced.matches) {
-      this.yaw += dt * this.p.turn;
+      this.yaw += dt * this.p.turn * (1 + 2.4 * (1 - clamp(this.reveal, 0, 1)) ** 2);   // spins up while it's drawn
       this.offA += dt * this.p.flowA;
       this.offB += dt * this.p.flowB;
       this.swingAt += dt * this.p.swing;
@@ -189,8 +201,8 @@ export class Orbit {
     this.cv.style.width = `${W}px`; this.cv.style.height = `${H}px`;
     // fewer rings, fewer segments when the sphere is small
     const m = Math.min(W, H);
-    this.rings = m < 90 ? 7 : m < 200 ? 13 : 19;
-    this.segs = m < 90 ? 36 : 72;
+    this.rings = this.weave ? 17 : m < 90 ? 7 : m < 200 ? 13 : 19;
+    this.segs = this.weave ? 144 : m < 90 ? 36 : 72;
     this.trig = Array.from({ length: this.segs + 1 }, (_, i) => [Math.cos((i / this.segs) * TAU), Math.sin((i / this.segs) * TAU)]);
   }
 
@@ -242,7 +254,8 @@ export class Orbit {
 
     // a faint body of light inside the sphere
     const body = ctx.createRadialGradient(cx - R * 0.25, cy - R * 0.3, R * 0.05, cx, cy, R * 1.15);
-    body.addColorStop(0, `hsla(${this.hue},80%,55%,${(0.07 + 0.07 * busy + 0.06 * this.lvl).toFixed(3)})`);
+    const rv = clamp(this.reveal, 0, 1);
+    body.addColorStop(0, `hsla(${this.hue},80%,55%,${((0.07 + 0.07 * busy + 0.06 * this.lvl) * rv * rv).toFixed(3)})`);
     body.addColorStop(1, `hsla(${this.hue},80%,40%,0)`);
     ctx.fillStyle = body;
     ctx.fillRect(0, 0, W, H);
@@ -255,7 +268,9 @@ export class Orbit {
       return [x1, y * ct - z1 * st, y * st + z1 * ct];
     };
 
-    const buckets = Array.from({ length: LEVELS }, () => new Path2D());
+    const NS = this.weave ? 3 : 1;             // strands per ring
+    const buckets = Array.from({ length: NS }, () => Array.from({ length: LEVELS }, () => new Path2D()));
+    const tips = [];                          // the drawing end of each ring, while it weaves in
     const axisB = rot(AXIS_B0, AXIS_A, Math.sin(this.swingAt) * 0.9 + this.swingAt * 0.25);
     const fams = [[AXIS_A, this.offA], [axisB, this.offB]];
     const N = this.rings, S = this.segs, trig = this.trig;
@@ -271,6 +286,7 @@ export class Orbit {
       this.eye = gk ? rot(b, gk, ga) : b;    // where the eye points now ([0,0,1] = straight at you)
     } else this.eye = null;
 
+    const half = (N - 1) / 2;
     fams.forEach(([n, off], fam) => {
       const [u, v] = basis(n);
       for (let i = 0; i < N; i++) {
@@ -281,28 +297,56 @@ export class Orbit {
         const wv = this.#ringWave(d, fam);
         const ring = this.#ringLight(d, fam) * (1 + 1.4 * wv);
         const grow = 1 + 0.07 * wv;          // the lit ring swells out a little
-        let px = 0, py = 0, pz = 0, lastQ = -1;
-        for (let k = 0; k <= S; k++) {
-          const [c, s] = trig[k];
-          const wx = n[0] * d + r * (u[0] * c + v[0] * s);
-          const wy = n[1] * d + r * (u[1] * c + v[1] * s);
-          const wz = n[2] * d + r * (u[2] * c + v[2] * s);
-          let [x, y, z] = view(wx * grow, wy * grow, wz * grow);
-          if (gk) [x, y, z] = rot([x, y, z], gk, ga);
-          const f = 1 + z * 0.07;            // a touch of perspective
-          const sx = cx + x * R * f, sy = cy - y * R * f;
-          if (k > 0) {
-            const zm = (z + pz) / 2;
-            const depth = 0.12 + 0.88 * Math.pow((zm + 1) / 2, 1.8);
-            const a = clamp(depth * ring, 0, 1.6) / 1.6;
-            const q = Math.min(LEVELS - 1, Math.floor(a * LEVELS));
-            if (q > 0) {
-              if (q !== lastQ) buckets[q].moveTo(px, py);
-              buckets[q].lineTo(sx, sy);
-              lastQ = q;
-            } else lastQ = -1;
+        // drawing in: each ring is a thread run round from its own start, alternate rings the other
+        // way; the weave grows from the middle ring out to the poles, the crossing family a beat behind
+        let K = S, k0 = 0, dir = 1, f = 1;
+        if (rv < 1) {
+          const at = ((Math.abs(i - half) / (half || 1)) * 0.86 + fam * 0.12) * 0.5;
+          f = clamp((rv - at) / 0.42, 0, 1);
+          f = f * f * (3 - 2 * f);
+          K = Math.round(S * f);
+          if (K < 1) continue;
+          k0 = (i * 11 + fam * 29) % S;
+          dir = (i + fam) % 2 ? -1 : 1;
+        }
+        // three strands, like the letters: they part while the ring is drawn, then settle close,
+        // still drifting a hair apart and crossing again
+        const ph = i * 1.93 + fam * 0.71;
+        const sp = this.weave * (0.55 + 0.45 * (1 - f)) * 0.05;
+        const tail = S * 0.05;
+        for (let st = 0; st < NS; st++) {
+          const B = buckets[st], sb = NS > 1 ? (st - 1) * 0.6 : 0;
+          let px = 0, py = 0, pz = 0, lastQ = -1;
+          for (let j = 0; j <= K; j++) {
+            const k = (((k0 + dir * j) % S) + S) % S;
+            const [c, s] = trig[k];
+            let e = grow;
+            if (NS > 1) {
+              const env = 0.35 + 0.65 * Math.abs(Math.sin((k / S) * TAU * 2 + ph));
+              e *= 1 + sp * env * (sb + Math.sin((k / S) * TAU * 3 + ph + st * 2.1 + this.t * 0.5));
+            }
+            const wx = (n[0] * d + r * (u[0] * c + v[0] * s)) * e;
+            const wy = (n[1] * d + r * (u[1] * c + v[1] * s)) * e;
+            const wz = (n[2] * d + r * (u[2] * c + v[2] * s)) * e;
+            let [x, y, z] = view(wx, wy, wz);
+            if (gk) [x, y, z] = rot([x, y, z], gk, ga);
+            const fp = 1 + z * 0.07;           // a touch of perspective
+            const sx = cx + x * R * fp, sy = cy - y * R * fp;
+            if (j > 0) {
+              const zm = (z + pz) / 2;
+              const depth = 0.12 + 0.88 * Math.pow((zm + 1) / 2, 1.8);
+              const lit = f < 1 ? 1 + 1.7 * Math.exp(-(K - j) / tail) : 1;   // the fresh thread burns brighter
+              const a = clamp(depth * ring * lit * (NS > 1 ? 0.62 : 1), 0, 1.6) / 1.6;
+              const q = Math.min(LEVELS - 1, Math.floor(a * LEVELS));
+              if (q > 0) {
+                if (q !== lastQ) B[q].moveTo(px, py);
+                B[q].lineTo(sx, sy);
+                lastQ = q;
+              } else lastQ = -1;
+            }
+            px = sx; py = sy; pz = z;
           }
-          px = sx; py = sy; pz = z;
+          if (f < 1 && st === 0) tips.push([px, py, f, pz]);
         }
       }
     });
@@ -311,21 +355,50 @@ export class Orbit {
     const w = Math.max(0.8, R * 0.015);
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    const passes = R > 40
+    const passes = this.weave
+      ? [[w * 3, 0.07, 50], [w * 1.2, 0.22, 60], [w * 0.55, 0.85, 74], [w * 0.25, 0.5, 92]]   // finer, so the strands read apart
+      : R > 40
       ? [[w * 5.5, 0.06, 46], [w * 2.4, 0.2, 56], [w, 0.8, 72], [w * 0.4, 0.5, 92]]
       : [[w * 2.6, 0.14, 55], [w, 0.8, 74]];
     // retro: coral glow round a cream filament, like phosphor on an old tube
     const flick = this.retro && !reduced.matches ? 0.94 + 0.06 * Math.sin(this.t * 47) * Math.sin(this.t * 13) : 1;
+    const hue = this.hue;
     for (const [lw, alpha, L] of passes) {
       ctx.lineWidth = lw;
       const core = L > 70;
-      const hue = this.hue;
-      const sat = (core ? 70 : 88) + 12 * this.deep;
-      const lum = L - (core ? 12 : 8) * this.deep;
-      for (let q = 1; q < LEVELS; q++) {
-        const a = ((q + 0.5) / LEVELS) * 1.6 * alpha * flick;
-        ctx.strokeStyle = `hsla(${hue.toFixed(1)},${sat}%,${lum}%,${clamp(a, 0, 1).toFixed(3)})`;
-        ctx.stroke(buckets[q]);
+      for (let st = 0; st < NS; st++) {
+        // the strands in three golds, as the letters: the middle one, a deeper gold, a cream
+        const tone = NS > 1 ? [0, -9, 10][st] : 0;
+        const sat = (core ? 70 : 88) + 12 * this.deep - (tone > 0 ? 22 : 0);
+        const lum = L - (core ? 12 : 8) * this.deep + tone;
+        for (let q = 1; q < LEVELS; q++) {
+          const a = ((q + 0.5) / LEVELS) * 1.6 * alpha * flick;
+          ctx.strokeStyle = `hsla(${hue.toFixed(1)},${sat}%,${lum}%,${clamp(a, 0, 1).toFixed(3)})`;
+          ctx.stroke(buckets[st][q]);
+        }
+      }
+    }
+    // a needle of light at the end of each thread still being drawn
+    for (const [x, y, f, z] of tips) {
+      const a = (1 - f) ** 0.5 * (0.35 + 0.65 * (z + 1) / 2);
+      const rr = w * 7;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, rr);
+      g.addColorStop(0, `hsla(44,90%,94%,${a.toFixed(3)})`);
+      g.addColorStop(0.25, `hsla(40,88%,66%,${(a * 0.4).toFixed(3)})`);
+      g.addColorStop(1, 'hsla(40,88%,50%,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(x - rr, y - rr, rr * 2, rr * 2);
+    }
+    // the opening's dial: two fine rims traced round the sphere
+    if (this.weave) {
+      const rf = clamp((rv - 0.3) / 0.7, 0, 1), e = rf * rf * (3 - 2 * rf);
+      if (e > 0) {
+        const top = -Math.PI / 2;
+        ctx.lineWidth = Math.max(0.6, w * 0.55);
+        ctx.strokeStyle = `hsla(${hue},60%,80%,${(0.34 * this.weave).toFixed(3)})`;
+        ctx.beginPath(); ctx.arc(cx, cy, R * 1.05, top, top + TAU * e); ctx.stroke();
+        ctx.strokeStyle = `hsla(${hue},80%,62%,${(0.2 * this.weave).toFixed(3)})`;
+        ctx.beginPath(); ctx.arc(cx, cy, R * 1.1, -top, -top - TAU * e, true); ctx.stroke();
       }
     }
     // scanlines cut through the light

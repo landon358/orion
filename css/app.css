@@ -231,84 +231,100 @@ body.dash .stage { opacity: 0; pointer-events: none; }
 .intro-words .cap { position: relative; display: inline-block; white-space: pre; }
 .intro-words .cap svg { position: absolute; left: 0; overflow: visible; filter: drop-shadow(0 0 10px rgba(214, 170, 90, 0.45)); }
 .intro-words .cap path { vector-effect: non-scaling-stroke; stroke-width: 1.5; }
-.intro .ch {
-  display: inline-block; opacity: 0; font-weight: 300;
-  background: linear-gradient(180deg, #fff8e6 10%, #e7c983 60%, #b8863a); -webkit-background-clip: text; background-clip: text; color: transparent;
-}
-.intro-words .rest { display: inline-block; overflow: hidden; white-space: pre; padding-bottom: 0.2em; margin-bottom: -0.2em; vertical-align: baseline; }
-.intro-words .rt { display: inline-block; color: rgba(246, 241, 231, 0.74); opacity: 0; }
-.intro-words .amp .rt { color: #d6aa5a; }
-.intro-words .ampc { color: #d6aa5a; }
-/* phones: one word per line */
-.intro-words.stack { flex-direction: column; align-items: flex-start; line-height: 1.12; }
-.intro-words.stack .iw { display: flex; align-items: baseline; }
+/* the sphere's slot opens on the left of the name; the sphere sits on the letters' cap height */
+.intro-words .intro-orb { position: relative; flex: none; align-self: stretch; }
+.intro-words .intro-orb i { position: absolute; left: 0; display: block; filter: drop-shadow(0 0 14px rgba(214, 170, 90, 0.35)); }
+.intro-orb canvas, .intro-orbfly canvas { pointer-events: none; display: block; }
+.intro-orbfly { position: fixed; transform-origin: 0 0; pointer-events: none; will-change: transform, opacity; }
+.intro-orbfly i { position: absolute; inset: 0; display: block; }
 .intro.on .intro-words .orion-mark.draw path { animation: thread 1.3s cubic-bezier(0.45, 0, 0.2, 1) var(--d, 0s) forwards; }
-/* the login's backdrop: a dark flight deck. A low amber horizon, a cooler dark sky above it,
-   faint CRT scan lines and a heavy vignette, so the screen reads like a lit instrument */
+/* the login's backdrop: near black, with a warm light pooled round the sphere */
 .intro-bg::before, .intro-bg::after { content: ""; position: absolute; inset: 0; opacity: 0; transition: opacity 1.6s cubic-bezier(0.22, 1, 0.36, 1); pointer-events: none; }
 .intro-bg::before {
   background:
-    radial-gradient(120% 70% at 50% 50%, transparent 40%, rgba(0, 0, 0, 0.75) 100%),
-    radial-gradient(90% 22% at 50% 62%, rgba(214, 150, 70, 0.16), transparent 70%),
-    linear-gradient(180deg, #0c0d0f 0%, #0d0c0b 46%, #17110a 60%, #0f0c09 72%, #080808 100%);
-}
-.intro-bg::after {
-  background:
-    linear-gradient(90deg, transparent, rgba(231, 180, 90, 0.18) 30%, rgba(246, 222, 170, 0.32) 50%, rgba(231, 180, 90, 0.18) 70%, transparent) 50% 61.5% / 100% 1px no-repeat,
-    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.022) 0 1px, transparent 1px 3px);
+    radial-gradient(42% 34% at 50% 34%, rgba(214, 160, 80, 0.14), transparent 70%),
+    radial-gradient(120% 80% at 50% 45%, transparent 45%, rgba(0, 0, 0, 0.72) 100%),
+    linear-gradient(180deg, #0d0d0e 0%, #0b0a09 60%, #080808 100%);
 }
 .intro.gated .intro-bg::before { opacity: 1; }
-.intro.gated .intro-bg::after { opacity: 0.8; }
-@media (max-width: 560px) {
-  .intro-bg::before { background:
-    radial-gradient(140% 70% at 50% 50%, transparent 40%, rgba(0, 0, 0, 0.75) 100%),
-    radial-gradient(120% 18% at 50% 64%, rgba(214, 150, 70, 0.18), transparent 70%),
-    linear-gradient(180deg, #0c0d0f 0%, #0d0c0b 50%, #17110a 63%, #0f0c09 74%, #080808 100%); }
-  .intro-bg::after { background-position: 50% 63.5%, 0 0; }
-}
 
-/* the login: ORION sits as a title at the top, "Welcome" large in the middle, one row beneath it */
+/* the login: ORION as a title at the top; the sphere, a welcome, then one glass card and the button */
 .intro.gated { cursor: auto; }
 .gate-wrap {
-  position: absolute; left: 50%; top: 50%; translate: -50% -50%; z-index: 1;
-  width: min(680px, calc(100vw - 32px)); display: grid; justify-items: center; gap: 28px;
+  position: absolute; left: 50%; top: 50%; translate: -50% -47%; z-index: 1;
+  width: min(380px, calc(100vw - 32px)); display: flex; flex-direction: column; align-items: center; text-align: center;
 }
-.gate-hi {
-  margin: 0; font: 200 clamp(34px, 4.6vw, 58px)/1 var(--font); letter-spacing: -0.015em;
-  color: rgba(246, 241, 231, 0.9);
+.gate-orb { position: relative; width: 156px; height: 156px; margin-bottom: 14px; }
+.gate-orb > i { position: absolute; inset: 0; display: block; }
+.gate-hi { margin: 0; font: 300 32px/1.1 var(--font); letter-spacing: -0.02em; color: #f6efe2; }
+.gate-sub { margin: 8px 0 26px; max-width: 32ch; text-wrap: balance; font: 400 14px/1.45 var(--font); color: rgba(246, 236, 214, 0.52); }
+.gate { position: relative; width: 100%; display: grid; gap: 14px; }
+.gate svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.gate-card {
+  border-radius: 20px; overflow: hidden; text-align: left;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.022));
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 24px 60px -24px rgba(0, 0, 0, 0.9);
+  -webkit-backdrop-filter: blur(18px) saturate(140%); backdrop-filter: blur(18px) saturate(140%);
+  transition: border-color 0.25s, box-shadow 0.25s;
 }
-.gate { position: relative; width: 100%; display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; }
-.gate-in {
-  height: 54px; padding: 0 18px; border-radius: 14px; width: 100%; min-width: 0;
-  background: rgba(255, 255, 255, 0.045); border: 1px solid rgba(255, 255, 255, 0.11);
-  color: #f6ecd6; font: 400 16px/1 var(--panel); letter-spacing: 0.03em; caret-color: #e7b45a;
-  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+.gate-card:focus-within { border-color: rgba(255, 255, 255, 0.32); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 4px rgba(255, 255, 255, 0.05), 0 24px 60px -24px rgba(0, 0, 0, 0.9); }
+.gate.bad .gate-card { border-color: rgba(224, 128, 111, 0.5); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 0 4px rgba(224, 128, 111, 0.08); }
+.gf { position: relative; display: flex; align-items: center; gap: 6px; height: 62px; padding: 0 12px 0 50px; cursor: text; }
+.gf + .gf { border-top: 1px solid rgba(255, 255, 255, 0.07); }
+.gf-ic { position: absolute; left: 17px; top: 50%; translate: 0 -50%; width: 20px; height: 20px; color: rgba(255, 255, 255, 0.4); transition: color 0.2s; }
+.gf:focus-within .gf-ic { color: #fff; }
+.gf-in {
+  flex: 1; min-width: 0; height: 100%; padding: 22px 0 6px; background: none; border: 0; outline: none; border-radius: 0;
+  color: #fff; font: 400 16px/1.2 var(--font); caret-color: #fff;
 }
-.gate-in::placeholder { color: rgba(246, 236, 214, 0.45); }
-.gate-in:focus { outline: none; background: rgba(255, 255, 255, 0.06); border-color: rgba(231, 180, 90, 0.6); box-shadow: 0 0 0 3px rgba(231, 180, 90, 0.12); }
+.gf-in:-webkit-autofill { -webkit-text-fill-color: #fff; transition: background-color 9999s; }
+.gf-lb {
+  position: absolute; left: 50px; top: 31px; translate: 0 -50%; transform-origin: 0 50%; pointer-events: none;
+  font: 400 15.5px/1 var(--font); color: rgba(255, 255, 255, 0.5);
+  transition: top 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), color 0.2s;
+}
+.gf-in:focus + .gf-lb, .gf-in:not(:placeholder-shown) + .gf-lb, .gf-in:-webkit-autofill + .gf-lb { top: 19px; transform: scale(0.76); color: rgba(255, 255, 255, 0.6); }
+.gf-in:focus + .gf-lb { color: rgba(255, 255, 255, 0.85); }
+.gf-caps { flex: none; padding: 5px 8px; border-radius: 999px; font: 500 11px/1 var(--font); color: #fff; background: rgba(255, 255, 255, 0.12); }
+.gf-caps[hidden] { display: none; }
+.gf-eye { flex: none; width: 38px; height: 38px; padding: 9px; border: 0; border-radius: 11px; background: none; color: rgba(255, 255, 255, 0.45); cursor: pointer; transition: color 0.15s, background 0.15s; }
+.gf-eye:hover { color: #fff; background: rgba(255, 255, 255, 0.05); }
+.gf-eye:focus-visible { outline: 2px solid rgba(255, 255, 255, 0.6); outline-offset: -2px; }
 .gate-go {
-  height: 54px; padding: 0 30px; border-radius: 14px;
-  font: 500 16px/1 var(--panel); letter-spacing: 0.04em; color: #1a1206; white-space: nowrap;
-  background: hsl(36 84% 62%); border: 1px solid hsl(38 90% 70%);
-  transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
+  position: relative; height: 54px; border-radius: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  font: 500 15.5px/1 var(--font); letter-spacing: 0.005em; color: #0b0b0c;
+  background: #fff; border: 1px solid #fff;
+  transition: background 0.2s, color 0.2s, border-color 0.2s, opacity 0.2s, transform 0.12s;
 }
-.gate-go:disabled { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.11); color: rgba(246, 236, 214, 0.5); cursor: default; }
-.gate-go:not(:disabled):hover { background: hsl(38 88% 67%); }
-.gate-go:not(:disabled):active { transform: scale(0.98); }
-.gate-go:focus-visible { outline: 2px solid rgba(231, 180, 90, 0.6); outline-offset: 2px; }
-.gate.busy .gate-go { color: rgba(246, 236, 214, 0.75); }
+.gg-i { display: grid; place-items: center; width: 18px; height: 18px; transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.gg-i svg { stroke-width: 1.9; }
+.gate-go:not(:disabled):hover { background: #ececec; }
+.gate-go:not(:disabled):hover .gg-i { transform: translateX(3px); }
+.gate-go:not(:disabled):active { transform: scale(0.985); }
+.gate-go:focus-visible { outline: 2px solid rgba(255, 255, 255, 0.7); outline-offset: 3px; }
+.gate-go:disabled { cursor: default; color: rgba(255, 255, 255, 0.4); background: rgba(255, 255, 255, 0.04); border-color: rgba(255, 255, 255, 0.08); }
+.gate-go[data-state="busy"], .gate-go[data-state="ok"] { color: #0b0b0c; background: #fff; border-color: #fff; }
+.gate-go[data-state="busy"] { opacity: 0.85; }
+.gg-spin { display: block; width: 15px; height: 15px; border-radius: 50%; border: 1.6px solid rgba(11, 11, 12, 0.2); border-top-color: #0b0b0c; animation: gspin 0.8s linear infinite; }
+@keyframes gspin { to { rotate: 360deg; } }
 /* only a failed login says anything */
-.gate-err { position: absolute; left: 0; right: 0; top: calc(100% + 14px); margin: 0; text-align: center; font: 400 13px/1.4 var(--font); color: var(--coral); }
+.gate-err { position: absolute; left: 0; right: 0; top: calc(100% + 16px); margin: 0; text-align: center; font: 400 13.5px/1.45 var(--font); color: var(--coral); }
+.gate-err span { display: block; margin-top: 3px; color: rgba(246, 236, 214, 0.5); }
 .gate-err:empty { display: none; }
 @media (max-width: 560px) {
-  .gate-wrap { gap: 28px; }
-  .gate { grid-template-columns: 1fr 1fr; }
-  .gate-go { grid-column: 1 / -1; }
+  .gate-orb { width: 128px; height: 128px; margin-bottom: 10px; }
+  .gate-hi { font-size: 28px; }
+  .gate-sub { margin-bottom: 22px; }
+}
+@media (max-height: 640px) {
+  .gate-orb { width: 96px; height: 96px; margin-bottom: 6px; }
+  .gate-sub { margin-bottom: 16px; }
 }
 
 /* a capital in flight to the top bar: solid letter fading into its thread twin */
 .intro-flyer { position: fixed; z-index: 2; transform-origin: 0 0; will-change: transform; pointer-events: none; }
-.intro-flyer .ch { position: absolute; left: 0; opacity: 1; font-family: var(--font); line-height: var(--lh, 1.2); white-space: pre; }
 .intro-flyer svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 0 5px rgba(214, 170, 90, 0.35)); }
 .intro-flyer path { vector-effect: non-scaling-stroke; stroke-width: 1; }
 /* the app settles in behind the logo */

@@ -862,46 +862,89 @@ $('#brand').innerHTML = orionLogo({ strands: 3, spread: 1.6 });
 $('#brand').addEventListener('click', () => playIntro({ brand: $('#brand'), force: true }));
 playIntro({ brand: $('#brand'), force: new URLSearchParams(location.search).has('intro'), gate: client.needsLogin ? loginGate : null });
 
-/* ---------- login: over the open ORION name, before the capitals fly home ---------- */
-function loginGate(panel) {
+/* ---------- login: the sphere waits above a glass card; it looks at you, thinks, and frowns in coral ---------- */
+const G_USER = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="3.6"/><path d="M5 19.5c1.3-3.3 3.9-5 7-5s5.7 1.7 7 5"/></svg>';
+const G_LOCK = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="9.5" rx="2.6"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>';
+const G_EYE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.8 12s3.3-6 9.2-6 9.2 6 9.2 6-3.3 6-9.2 6-9.2-6-9.2-6Z"/><circle cx="12" cy="12" r="2.8"/></svg>';
+const G_EYE_OFF = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4l16 16M10 6.2A9.6 9.6 0 0 1 12 6c5.9 0 9.2 6 9.2 6a15.6 15.6 0 0 1-2.7 3.4M6.4 7.6C4 9.3 2.8 12 2.8 12s3.3 6 9.2 6c1.4 0 2.6-.3 3.7-.8"/><path d="M9.9 9.9a2.8 2.8 0 0 0 4.2 4.2"/></svg>';
+const G_ARROW = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6.5 18.5 12 13 17.5"/></svg>';
+const G_CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 12.5 10 17l8.5-9.5"/></svg>';
+
+function loginGate(panel, { orb } = {}) {
   panel.innerHTML = `
-    <h1 class="gate-hi">Welcome</h1>
-    <form class="gate" novalidate>
-      <label class="sr-only" for="g-name">Name</label>
-      <input class="gate-in" id="g-name" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Name" enterkeyhint="next">
-      <label class="sr-only" for="g-pass">Password</label>
-      <input class="gate-in" id="g-pass" name="password" type="password" autocomplete="current-password" placeholder="Password" enterkeyhint="go">
-      <button class="gate-go" type="submit" disabled>Connect</button>
+    <div class="gate-orb" aria-hidden="true"></div>
+    <h1 class="gate-hi" data-rise>Welcome</h1>
+    <p class="gate-sub" data-rise>Sign in with your name and password.</p>
+    <form class="gate" novalidate data-rise>
+      <div class="gate-card">
+        <label class="gf">
+          <span class="gf-ic">${G_USER}</span>
+          <input class="gf-in" id="g-name" name="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder=" " enterkeyhint="next">
+          <span class="gf-lb">Name</span>
+        </label>
+        <label class="gf">
+          <span class="gf-ic">${G_LOCK}</span>
+          <input class="gf-in" id="g-pass" name="password" type="password" autocomplete="current-password" placeholder=" " enterkeyhint="go">
+          <span class="gf-lb">Password</span>
+          <span class="gf-caps" hidden>Caps Lock</span>
+          <button class="gf-eye" type="button" aria-label="Show password" aria-pressed="false">${G_EYE}</button>
+        </label>
+      </div>
+      <button class="gate-go" type="submit" disabled><span class="gg-t">Continue</span><span class="gg-i">${G_ARROW}</span></button>
       <p class="gate-err" role="alert"></p>
     </form>`;
   const form = panel.querySelector('form');
   const name = form.querySelector('#g-name'), pass = form.querySelector('#g-pass'), go = form.querySelector('.gate-go');
-  const err = form.querySelector('.gate-err');
+  const label = go.querySelector('.gg-t'), icon = go.querySelector('.gg-i');
+  const err = form.querySelector('.gate-err'), eye = form.querySelector('.gf-eye'), caps = form.querySelector('.gf-caps');
   let fails = 0, busy = false;
   const ready = () => { go.disabled = busy || !name.value.trim() || !pass.value; };
-  form.addEventListener('input', () => { ready(); err.textContent = ''; });
+  const setGo = (text, svg, cls = '') => { label.textContent = text; icon.innerHTML = svg; go.dataset.state = cls; };
+  form.addEventListener('input', () => {
+    ready();
+    if (err.textContent) { err.textContent = ''; form.classList.remove('bad'); orb?.setState('idle'); }
+  });
   name.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !pass.value) { e.preventDefault(); pass.focus(); } });
-  if (isWide()) setTimeout(() => name.focus({ preventScroll: true }), 900);
+  const capsCheck = (e) => { caps.hidden = !e.getModifierState?.('CapsLock'); };
+  pass.addEventListener('keydown', capsCheck);
+  pass.addEventListener('keyup', capsCheck);
+  pass.addEventListener('blur', () => { caps.hidden = true; });
+  eye.addEventListener('click', (e) => {
+    e.preventDefault();
+    const show = pass.type === 'password';
+    pass.type = show ? 'text' : 'password';
+    eye.innerHTML = show ? G_EYE_OFF : G_EYE;
+    eye.setAttribute('aria-pressed', String(show));
+    eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    pass.focus({ preventScroll: true });
+  });
+  if (isWide()) setTimeout(() => name.focus({ preventScroll: true }), 1400);
   return new Promise((resolve) => {
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (go.disabled) return;
-      busy = true; ready(); form.classList.add('busy');
-      go.textContent = 'Connecting';
+      busy = true; ready(); form.classList.add('busy'); form.classList.remove('bad');
+      err.textContent = '';
+      setGo('Connecting', '<i class="gg-spin"></i>', 'busy');
+      orb?.look(); orb?.setState('thinking');
       try {
         await client.login(name.value.trim(), pass.value);
-        go.textContent = 'Connected';
+        const who = name.value.trim();
+        setGo(`Welcome, ${who.charAt(0).toUpperCase()}${who.slice(1)}`, G_CHECK, 'ok');
+        orb?.setState('speaking'); orb?.talk(1);
         haptic(8);
-        setTimeout(resolve, 350);
+        setTimeout(resolve, 700);
       } catch (x) {
-        busy = false; form.classList.remove('busy');
-        go.textContent = 'Connect';
+        busy = false; form.classList.remove('busy'); form.classList.add('bad');
+        setGo('Continue', G_ARROW);
+        orb?.setState('needs-you');
         fails += 1;
-        err.textContent = x?.reason === 'network' ? 'Can’t reach ORION. Is he running?'
-          : fails >= 3 ? 'Wrong name or password. Five misses locks this device out for 10 minutes.' : 'Wrong name or password.';
+        err.innerHTML = x?.reason === 'network' ? 'Can’t reach ORION right now. Is the PC on?'
+          : fails >= 3 ? 'Wrong name or password. Five misses locks this device out for 10 minutes. <span>Forgot it? Ask Landon to reset it.</span>'
+          : fails === 2 ? 'Wrong name or password. <span>Forgot it? Ask Landon to reset it.</span>' : 'Wrong name or password.';
         pass.value = ''; ready();
         pass.focus();
-        if (!reduced.matches) form.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-6px)' }, { transform: 'translateX(5px)' }, { transform: 'translateX(-3px)' }, { transform: 'translateX(0)' }], { duration: 360, easing: 'ease-out' });
+        if (!reduced.matches) form.querySelector('.gate-card').animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-7px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(-3px)' }, { transform: 'translateX(0)' }], { duration: 380, easing: 'ease-out' });
       }
     });
   });
