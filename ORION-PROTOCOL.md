@@ -281,10 +281,11 @@ local brain skipped, or a withdrawn "I cannot" reply handed to Claude):
 Accounts, login, watch lists, briefs, Local / Local+, the admin view and account management: see `ACCOUNTS.md`.
 The `text: ""` reset mid-stream and the no-markdown guarantee: see `CLAUDE.md`.
 
-## Proposed (not yet in the backend)
+## Implemented on the backend 2026-11-18 (proposed by the UI session on 2026-11-17)
 
-Written by the UI session on 2026-11-17. All of these are additions: new optional fields on existing frames, or new
-frame types. Unknown fields and types are ignored on both sides, so nothing breaks before the backend has them.
+All of these are additions: new optional fields on existing frames, or new frame types. Unknown fields and types are
+ignored on both sides. Every item below is live on the PC and covered by `tests/test_ui_bridge.py` there; the
+"Backend notes" under each section say exactly what the backend sends where it differs from the proposal.
 
 ### 1. Times on tasks (fills the Tasks page's Daily and Scheduled tabs)
 
@@ -304,6 +305,14 @@ Daily and Scheduled need to know when things happen. Add optional fields to `tas
   after each run. A finished timer/reminder goes to `status: "done"`.
 - Guests get their own timers/reminders; owner routines never reach a guest.
 
+**Backend notes.** Ids and sources as sent: routines `routine_<name>` with `source: "Routine"` (or `"Reminder"` for a
+recurring reminder made in chat), `every` (human words: "day at 07:30", "mon/wed at 08:00", "6h"), `next` (epoch ms) and
+`last` (ISO time of the last run) when known; dated reminders `reminder_<name>` with `source: "Planner"`, `due` (epoch ms),
+`status: queued` then `done`; timers `timer_<label>` with `source: "Timer"`, `status: running`, `due`. The backend
+re-sends the changed tasks after any turn that used set_timer / cancel_timer / remind_at / remind_on / routine_add /
+routine_remove, and when a timer finishes (`status: done`). A `task` for a running workflow has id `wf_<run>` and
+`source: "Workflows"` (see SYNC.md).
+
 ### 2. "Describe your task": new tasks from the Tasks page
 
 Each tab has a New button. The person describes the task in plain words, and the UI sends an ordinary `send`
@@ -321,6 +330,13 @@ with a short note in front **and** a `task` hint field:
   at the time the text names, else 09:00 local.
 - ORION confirms in a short reply and sends the matching `watch` or `task` frame so it appears on the right tab.
 - Without the `task` field (older UI), the bracketed note in the text says the same thing.
+
+**Backend notes.** With the `task` hint, code decides and no model runs (the `route` frame says `reason: "task hint"`):
+`always` -> `watch_add`; `daily` -> a routine at the time named in the text (`at 7`, `3pm`, default 09:00), or a
+recurring reminder when the text says "remind me"; `scheduled` -> a dated reminder on `task.date` at the time named
+(default 09:00), any distance ahead (owner: a one-off routine; a guest gets a timer, so at most 60 days ahead). Guests
+cannot have routines: a guest's `daily` becomes a watch item and the reply says so. The bracketed note is stripped
+before the text is used.
 
 ### 3. Files ORION made (owner only)
 
@@ -341,6 +357,9 @@ A panel lists the files in ORION's workspace and lets the owner download them, o
 - Send `files` again (unasked) when ORION creates a new file, so the panel updates.
 - Guests: `files {items: []}`.
 
+**Backend notes.** As proposed. `files` is re-sent after any turn that used file_write, sheet_create, sheet_append,
+export_chat or python_run. The `chat/` subfolder (pictures sent in chat, kept 7 days) is left out of the list.
+
 ### 4. Your rules (style rules over the socket)
 
 The "from now on…" rules in each account's STYLE.md, listed and removable in the UI:
@@ -353,6 +372,10 @@ The "from now on…" rules in each account's STYLE.md, listed and removable in t
 ```
 
 Every change replies with the full `style` list. Per account; guests manage their own.
+
+**Backend notes.** As proposed; items also carry `n` (1-based position) and a change reply carries `result` (the
+sentence Orion would say: "Noted...", "Already a standing rule...", "The style list is full (12 rules)..."). `style_remove`
+accepts `id` ("s3"), `n` or `text`.
 
 ### 5. Pictures in chat
 
@@ -367,6 +390,10 @@ The local model has vision. The composer can attach up to 4 pictures, resized in
 - Treat each image like `file_read` on a picture: the local model describes it, a cloud turn gets the image block.
 - `text` may be empty when only a picture is sent.
 - Reject anything over 4 images or 6 MB in total with an `error` frame.
+
+**Backend notes.** As proposed. The echoed user `message` carries `images: [<saved file name>, ...]`. Each picture shows
+in the activity log as a tool call `image_look` on the `files` band before the reply. Pictures are saved under the
+workspace's `chat/` folder for 7 days.
 
 ### 5b. Email alerts (every account; chosen instead of SMS on 2026-11-17)
 
@@ -395,12 +422,46 @@ someone else up.
 - `email_on {on}` pauses or resumes; `email_remove` forgets the address.
 - Every reply goes to all devices of that account, so a second device's dialog stays in step.
 
+**Backend notes.** As proposed, with: while a code is pending the object shows the *new* address with
+`verified: false, on: false, pending: true`; a verified address stays in force until the new code is confirmed, and if
+the code expires the object goes back to the verified address. `snapshot.email_alerts` is omitted until the account
+has an address. Errors (exact text): "That does not look like an email address.", "Email alerts are not set up on
+Orion yet. The owner runs orion_connect.py email-alerts first.", "Too many codes in the last hour. Try again later.",
+"That code isn’t right. Check the latest email from ORION.", "Five wrong codes. Verification is locked for an hour.",
+"Too many wrong codes. Verification is locked for an hour.", "That code has expired. Ask for a new one.", "Verify an
+address first." What gets emailed and when is in SYNC.md ("Email alerts"); the sender is Resend (EMAIL-SETUP.md) or a
+Gmail made for ORION. One-click unsubscribe links point at the PC's Funnel address (`/u/<account>/<token>`) and only
+turn alerts off.
+
 ### 6. Sources on web answers (optional, nicer than parsing)
 
 Web answers end with a "Sources" line today; the UI turns that line into small links. If the final `message`
 also carried `sources: [{title, url}]`, the UI would use that instead of parsing the text.
 
+**Backend notes.** The final `message` carries `sources: [{title, url}]` (up to 6) whenever the turn read pages:
+`fetch_page` calls (title = the domain), Wikipedia lookups, and the URLs inside `research` results. Omitted when empty.
+
 ### 7. `admin_snapshot.telemetry` shape
 
-The admin page draws whatever `telemetry` holds. Please document its fields here (the UI looks for per-tier counts,
-`cost_usd`, average `ms`, retries, escalations and withdrawals over today / 7 days).
+`telemetry` is today's summary and `telemetry_7d` the last seven days, both the same shape (from
+`orion/telemetry.py`, one row per turn in `data/turns.sqlite`):
+
+```json
+{ "days": 1, "turns": 42,
+  "by_tier": { "local": 38, "haiku": 4 }, "local_share": 0.905,
+  "cost_by_tier_usd": { "local": 0, "haiku": 0.0312 }, "cost_usd": 0.0312,
+  "tool_turns": 25, "top_tools": [["get_weather", 6], ["set_timer", 4]],
+  "repairs": 3, "retries": 1, "withdrawn": 1, "withdrawn_rate": 0.024,
+  "escalated": 2, "escalation_reasons": { "local reply claimed inability": 1, "tool failed twice": 1 },
+  "errors": 0, "median_first_token_s": 0.9, "median_total_s": 3.4 }
+```
+
+- `turns` per tier are in `by_tier`; `repairs` = tool arguments the backend had to fix; `retries` = tool calls retried
+  after an error; `withdrawn` = local replies taken back and redone by Claude; `escalated` = turns handed to Claude after
+  the local brain failed, with the reasons; latency is in seconds (medians), not ms.
+- With no turns in the window the object is `{ "days": 1, "turns": 0 }`.
+- `admin_snapshot.email_alerts` is `{ configured, from, sent_today, queued, accounts, last_error }` for the email channel.
+
+## Proposed (not yet in the backend)
+
+Nothing at the moment. Add new frame shapes here for Landon to approve.
