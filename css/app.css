@@ -1879,3 +1879,65 @@ body.chat .feed-inner { max-width: 720px; gap: 34px; }
 .em-ask.busy #em-go { opacity: 0.55; pointer-events: none; }
 #btn-email { position: relative; }
 #btn-email svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ================================================================ */
+/* Phone polish (2026-11-17)                                         */
+/* The app is sized to the *visible* screen (app.js sets --app-h and  */
+/* --vv-top from visualViewport), so it never scrolls, nothing hides  */
+/* under the browser's bars, and the keyboard pushes the page up as a */
+/* whole: the top bar and ORION stay in view above the composer.      */
+/* ================================================================ */
+@media (max-width: 899px) {
+  html { height: 100%; overflow: hidden; }
+  body {
+    position: fixed; left: 0; right: 0; top: 0;
+    height: var(--app-h, 100%);
+    transform: translateY(var(--vv-top, 0px));
+  }
+  body.home { --map-h: calc(var(--app-h, 100svh) - var(--top-h) - var(--dock-h)); }
+  .summary { max-height: calc(var(--app-h, 100svh) - var(--top-h) - var(--dock-h) - 56px); }
+  .detail { max-height: calc(var(--app-h, 100svh) * 0.82); }
+
+  /* no "While you were gone" pill and no status line under ORION, for now */
+  .sum-pill, body.sum-open .summary, .m-state { display: none !important; }
+  /* the envelope sits bare like the bell, not in a circle */
+  #btn-email { background: none; border-color: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none; }
+
+  /* ORION page: a smaller sphere, centred in the space between the bar and the composer */
+  body.home .orbit { inset: 0; margin: auto; width: min(196px, 50vw); height: min(196px, 50vw, 84%); }
+  /* conversation: a small ORION over the words; smaller still while typing */
+  body.chat.typing { --map-h: 44px; }
+
+  /* the menu: an opaque full screen (no blur over a moving sphere) */
+  .drawer { background: #0d0c0b; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .scrim { background: transparent; }
+  .dt-wide { display: none; }
+
+  /* pages: four tiles in their own card, like the rail on a wide screen */
+  .drawer-pages {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
+    margin: 4px 16px 0; padding: 8px; border-radius: 22px;
+    background: rgba(255, 255, 255, 0.03); border: 1px solid var(--edge);
+  }
+  .drawer-pages a {
+    display: flex; align-items: center; justify-content: flex-start; gap: 12px;
+    height: 56px; padding: 0 12px; border-radius: 15px; text-decoration: none;
+    font: 500 0.9375rem/1 var(--font); color: var(--text-2);
+    background: none; border: 1px solid transparent;
+    transition: background 0.15s, color 0.15s;
+  }
+  .drawer-pages a:active { background: rgba(255, 255, 255, 0.06); }
+  .drawer-pages a i { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 11px; background: rgba(255, 255, 255, 0.05); }
+  .drawer-pages a svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .drawer-pages a.on { color: var(--ink); background: var(--paper); }
+  .drawer-pages a.on i { background: rgba(0, 0, 0, 0.08); }
+
+  /* then Tasks as its own section, under a rule */
+  .drawer-sec { display: flex; align-items: baseline; justify-content: space-between; margin: 22px 16px 10px; padding-top: 18px; border-top: 1px solid var(--edge); }
+  .drawer-sec h3 { margin: 0; font: 500 1.25rem/1.1 var(--font); letter-spacing: -0.01em; color: var(--text); }
+
+  /* Business and Admin: a still warm gradient instead of the 3D shader, which is too heavy for a phone */
+  .shader { background: radial-gradient(120% 55% at 15% 0%, rgba(214, 150, 70, 0.16), transparent 62%), radial-gradient(90% 45% at 100% 100%, rgba(224, 128, 111, 0.07), transparent 60%); }
+  body.dash .shader { opacity: 1; }
+}
+@media (min-width: 900px) { .dt-phone, .drawer-sec { display: none; } }

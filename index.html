@@ -188,17 +188,18 @@
   <div class="scrim" id="scrim"></div>
   <section class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" aria-hidden="true">
     <header class="drawer-head">
-      <h2 id="drawer-title">Tasks</h2>
+      <h2 id="drawer-title"><span class="dt-phone">Menu</span><span class="dt-wide">Tasks</span></h2>
       <button class="tile ghost" id="btn-drawer-close" aria-label="Close dashboards">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>
       </button>
     </header>
     <nav class="drawer-pages" aria-label="Pages">
-      <a href="#/" data-route="home">ORION</a>
-      <a href="#/chat" data-route="chat">Conversation</a>
-      <a href="#/business" data-route="business" data-owner>Business</a>
-      <a href="#/admin" data-route="admin" data-admin>Admin</a>
+      <a href="#/" data-route="home"><i><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2.6"/><circle cx="5" cy="5" r="1.6"/><circle cx="19" cy="6" r="1.6"/><circle cx="5" cy="19" r="1.6"/><circle cx="19" cy="18" r="1.6"/><path d="M6.2 6.2 10 10M17.8 7.2 14 10.4M6.2 17.8 10 14M17.8 16.8 14 13.6"/></svg></i>ORION</a>
+      <a href="#/chat" data-route="chat"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6.5A2.5 2.5 0 0 1 7.5 4h9A2.5 2.5 0 0 1 19 6.5v7a2.5 2.5 0 0 1-2.5 2.5H11l-4 3.5V16h0.5"/><path d="M5 6.5V14a2 2 0 0 0 2 2"/></svg></i>Conversation</a>
+      <a href="#/business" data-route="business" data-owner><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16"/><path d="M7 16v-4M12 16V7M17 16v-6"/></svg></i>Business</a>
+      <a href="#/admin" data-route="admin" data-admin><i><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8.5" r="3"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9.5" r="2.2"/><path d="M15.8 14.2c2.4-.4 4.3 1.1 4.7 4.3"/></svg></i>Admin</a>
     </nav>
+    <div class="drawer-sec"><h3>Tasks</h3></div>
     <div class="tk-tabs" id="tk-tabs" role="tablist" aria-label="Kinds of task">
       <span class="tk-thumb" id="tk-thumb" aria-hidden="true"></span>
       <button role="tab" data-tab="always" aria-selected="true">Always</button>

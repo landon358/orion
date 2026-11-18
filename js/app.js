@@ -174,6 +174,21 @@ function layout() {
   placeSummary();
 }
 new ResizeObserver(layout).observe($('#dock'));
+
+/* phones: size the app to the visible screen. iOS keeps the page as tall as the screen when the keyboard opens
+   and scrolls it instead, which pushed the top bar and ORION out of view; this follows the visible part. */
+const vv = window.visualViewport;
+function fitViewport() {
+  if (!vv || isWide()) { root.style.removeProperty('--app-h'); root.style.removeProperty('--vv-top'); return; }
+  root.style.setProperty('--app-h', `${Math.round(vv.height)}px`);
+  root.style.setProperty('--vv-top', `${Math.round(vv.offsetTop)}px`);
+  if (ui.route === 'chat') { const f = $('#feed'); f.scrollTop = f.scrollHeight; }     // keep the latest words in view above the keyboard
+}
+vv?.addEventListener('resize', fitViewport);
+vv?.addEventListener('scroll', fitViewport);
+addEventListener('orientationchange', () => setTimeout(fitViewport, 300));
+wideMQ.addEventListener('change', fitViewport);
+fitViewport();
 addEventListener('resize', layout);
 wideMQ.addEventListener('change', () => { setDetail(ui.detailOpen && isWide()); applyRoute(); });
 
@@ -1329,6 +1344,7 @@ function openDrawer() {
   drawer.setAttribute('aria-hidden', 'false');
   $('#scrim').classList.add('on');
   setPop(false);
+  if (!isWide()) orbit.paused = true;        // the menu covers him on a phone: let the GPU rest
   renderTasks();
   haptic(6);
   setTimeout(() => $('#btn-drawer-close').focus({ preventScroll: true }), 50);
@@ -1340,6 +1356,7 @@ function closeDrawer() {
   drawer.classList.remove('open');
   drawer.setAttribute('aria-hidden', 'true');
   $('#scrim').classList.toggle('on', !isWide() && ui.detailOpen);
+  orbit.paused = DASH.has(ui.route);
 }
 $('#btn-menu').addEventListener('click', () => openDrawer());
 $('#btn-drawer-close').addEventListener('click', closeDrawer);

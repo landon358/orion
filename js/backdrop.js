@@ -16,7 +16,8 @@ export function setBackdrop(on, host) {
   if (on) {
     if (parked) { clearTimeout(parked.timer); unmount = parked.u; parked = null; host.classList.add('live'); return; }
     if (unmount || loading) return;
-    if (!hasWebGL()) return;
+    if (!hasWebGL() || matchMedia('(max-width: 899px)').matches) return;   // phones get a still CSS gradient
+
     host.classList.remove('live');
     loading = import('./vendor/shader-bg.js')
       .then(({ mount }) => {
