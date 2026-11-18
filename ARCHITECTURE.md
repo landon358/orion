@@ -192,7 +192,9 @@ the reason is reported. Surfaces: UI frames `cloud` / `cloud_master`, HTTP `/clo
   "when you have a moment", "no rush", "queue this") is answered at once by code ("Queued as job 3: ...") and run later by
   one worker thread as an ordinary `Orion.chat` turn for that account (same tools, same limits), after `wait_idle` so a
   live turn keeps the GPU. While `Orion.job_running` is set, `_exec_call` treats CONFIRM tools as it does for routines
-  (refused: nobody is there to say yes) and no job can queue another. Results go on the bus as `job` events (queued,
+  (refused: nobody is there to say yes) and no job can queue another. A job whose reply claims inability or a result with
+  no tool having run is retried once with the instruction made explicit (2026-11-18; the live-chat path hands such a reply
+  to Claude, but a job on an account without cloud allowance has only this). Results go on the bus as `job` events (queued,
   running, done, failed): the bridge shows a task `job_<id>` (source Jobs), an activity line and a banner; push and email
   carry done/failed; the "while you were away" opening lists them. `job_list` / `job_cancel` by code (`JOB_STATUS`,
   `JOB_CANCEL`), `job_start` also offered to the models. Jobs queued when Orion stops are marked lost, never re-run.
