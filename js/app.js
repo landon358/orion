@@ -2,6 +2,7 @@ import { createLeoClient } from './leo-client.js';
 import { groupOf, skillsOf, describe } from './tools.js';
 import { mountBusiness } from './business.js';
 import { mountAdmin } from './admin.js';
+import { mountProfile } from './profile.js';
 import { setBackdrop } from './backdrop.js';
 import { orionLogo } from './logo.js';
 import { playIntro } from './intro.js';
@@ -86,6 +87,8 @@ function applyAccount() {
   body.classList.toggle('no-admin', !canAdmin());
   if ((!canAct() && ui.route === 'business') || (!canAdmin() && ui.route === 'admin')) go('home');
 }
+// the account changed mid-session (a new title from the Profile page, or the owner's admin edit)
+client.on('account', () => { applyAccount(); if (ui.route === 'profile') prof.render(); });
 const body = document.body;
 const root = document.documentElement;
 const wideMQ = matchMedia('(min-width: 900px)');
@@ -877,7 +880,10 @@ function upsertLeoMessage(m) {
       ? `<button class="meta" aria-expanded="false">${steps.length} step${steps.length === 1 ? '' : 's'}${tools.length ? ` · ${esc(tools.slice(0, 2).join(', '))}${tools.length > 2 ? ` +${tools.length - 2}` : ''}` : ''}${ICON.chev}</button>`
       : '';
     const at = new Date(m.at ?? Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-    el.innerHTML = `<div class="msg-head"><span class="who">ORION</span><span class="tok" hidden></span><span class="secs" hidden></span><span class="route" hidden></span>${meta}<time class="at">${at}</time></div><div class="body"></div>${steps.length ? `<ul class="steps-list">${steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}`;
+    // a result ORION brings on his own (a scheduled task or background job finished): a small label says which
+    const kicker = m.background ? `<div class="bg-kicker">${ICON.tasks}<span>${esc(m.title || 'Done in the background')}</span></div>` : '';
+    el.innerHTML = `${kicker}<div class="msg-head"><span class="who">ORION</span><span class="tok" hidden></span><span class="secs" hidden></span><span class="route" hidden></span>${meta}<time class="at">${at}</time></div><div class="body"></div>${steps.length ? `<ul class="steps-list">${steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}`;
+    if (m.background) el.classList.add('background');
     $('button.meta', el)?.addEventListener('click', (e) => e.currentTarget.setAttribute('aria-expanded', String(el.classList.toggle('open'))));
     ui.lastLeo?.classList.remove('live');
     el.classList.add('live');
@@ -1664,7 +1670,21 @@ const whenOf = (t) => t.due ?? t.next ?? t.at ?? null;
 const minuteOfDay = (ms) => { if (ms == null) return 0; const d = new Date(ms); return d.getHours() * 60 + d.getMinutes(); };
 // background work: jobs ("in the background, research X") and workflow runs; they live in their own list
 const isBackground = (t) => /^(job|wf)_/.test(t.id ?? '') || t.source === 'Jobs' || t.source === 'Workflows';
-const isDated = (t) => !isBackground(t) && !isRoutine(t) && (/^timer_/.test(t.id ?? '') || (t.due ?? t.next) != null) && t.status !== 'done' && t.status !== 'rejected';
+// dated: timers, dated reminders and one-off scheduled tasks (`sched_`: work ORION does at that time). Finished ones
+// stay on their calendar day with their result; only pending ones count as "coming up".
+const isDatedAny = (t) => !isBackground(t) && !isRoutine(t) && (/^(timer|sched|reminder)_/.test(t.id ?? '') || (t.due ?? t.next) != null);
+const isDated = (t) => isDatedAny(t) && t.status !== 'done' && t.status !== 'rejected';
+const isScheduled = (t) => t.source === 'Scheduled' || /^sched_/.test(t.id ?? '');
+const TK_STATUS = { queued: '', running: 'Working on it', done: 'Done', rejected: 'Didn’t finish' };
+/* a scheduled task's second line: its status, and the result once there is one (tap to read it all) */
+const tkDetail = (t) => {
+  if (!isScheduled(t) && !t.detail) return '';
+  const st = TK_STATUS[t.status] ?? '';
+  const who = isScheduled(t) ? 'ORION does this' : '';
+  const line = [who, st].filter(Boolean).join(' · ');
+  const open = ui.bgOpen.has(t.id);
+  return `${line ? `<small>${esc(line)}</small>` : ''}${t.detail ? `<button type="button" class="bg-detail${open ? ' open' : ''}" data-bg="${esc(t.id)}" aria-expanded="${open}">${esc(t.detail)}</button>` : ''}`;
+};
 let watchWait = 0;
 ui.watchGoing = new Set();
 ui.tab = 'always';
@@ -1716,16 +1736,17 @@ function renderTasks() {
     const daily = s.tasks.filter(isRoutine).sort((a, b) => minuteOfDay(whenOf(a)) - minuteOfDay(whenOf(b)));
     body = `
       <div class="tk-list">${daily.length ? daily.map((t) => `
-        <div class="tk-item"><span class="tk-time">${whenOf(t) ? clockAt(whenOf(t)) : '—'}</span><span class="tk-t">${esc(t.title)}${t.every && !/day/i.test(t.every) ? `<small>every ${esc(t.every)}</small>` : ''}</span></div>`).join('')
-        : '<p class="tk-empty">Nothing yet.</p>'}
+        <div class="tk-item${isScheduled(t) ? ' tk-sched' : ''}${t.detail ? ' has-detail' : ''}${ui.bgOpen.has(t.id) ? ' open' : ''}" data-st="${esc(t.status ?? '')}"><span class="tk-time">${whenOf(t) ? clockAt(whenOf(t)) : (t.every && !/day/i.test(t.every) ? esc(t.every) : '—')}</span><span class="tk-t">${esc(t.title)}${t.every && !/^day at/i.test(t.every) ? `<small>${esc(/^every/i.test(t.every) ? t.every : `every ${t.every}`)}</small>` : ''}${tkDetail(t)}</span>${isScheduled(t) || t.source === 'Reminder' ? rowX(`task:${t.title}`, t.title) : ''}</div>`).join('')
+        : '<p class="tk-empty">Nothing yet. Describe something ORION should do for you every day.</p>'}
       </div>
       ${newBtn('New daily task')}`;
   }
 
   if (ui.tab === 'scheduled') {
-    const dated = s.tasks.filter(isDated).filter((t) => whenOf(t));
+    const datedAll = s.tasks.filter(isDatedAny).filter((t) => whenOf(t));
+    const dated = datedAll.filter(isDated);
     const byDay = new Map();
-    dated.forEach((t) => { const k = dayKey(whenOf(t)); byDay.set(k, [...(byDay.get(k) ?? []), t]); });
+    datedAll.forEach((t) => { const k = dayKey(whenOf(t)); byDay.set(k, [...(byDay.get(k) ?? []), t]); });
     const { y, m, sel } = ui.cal;
     const first = new Date(y, m, 1);
     const lead = (first.getDay() + 6) % 7;                    // weeks start on Monday
@@ -1740,7 +1761,7 @@ function renderTasks() {
     }
     const onDay = (byDay.get(sel) ?? []).sort((a, b) => whenOf(a) - whenOf(b));
     const upcoming = dated.filter((t) => whenOf(t) >= t0 && dayKey(whenOf(t)) !== sel).sort((a, b) => whenOf(a) - whenOf(b)).slice(0, 5);
-    const row = (t, withDay) => `<div class="tk-item"><span class="tk-time">${withDay ? new Date(whenOf(t)).toLocaleDateString([], { day: 'numeric', month: 'short' }) : clockAt(whenOf(t))}</span><span class="tk-t">${esc(t.title)}</span></div>`;
+    const row = (t, withDay) => `<div class="tk-item${isScheduled(t) ? ' tk-sched' : ''}${t.detail ? ' has-detail' : ''}${ui.bgOpen.has(t.id) ? ' open' : ''}" data-st="${esc(t.status ?? '')}"><span class="tk-time">${withDay ? new Date(whenOf(t)).toLocaleDateString([], { day: 'numeric', month: 'short' }) : clockAt(whenOf(t))}</span><span class="tk-t">${esc(t.title)}${tkDetail(t)}</span>${(isScheduled(t) || /^reminder_/.test(t.id ?? '')) && t.status !== 'done' && t.status !== 'rejected' ? rowX(`task:${t.title}`, t.title) : ''}</div>`;
     body = `
       <div class="cal">
         <div class="cal-head">
@@ -1795,7 +1816,16 @@ $('#panel-tasks').addEventListener('click', (e) => {
   const bg = e.target.closest('[data-bg]');
   if (bg) { const id = bg.dataset.bg; ui.bgOpen.has(id) ? ui.bgOpen.delete(id) : ui.bgOpen.add(id); return renderTasks(); }
   const x = e.target.closest('[data-unwatch]');
-  if (x) { ui.watchGoing.add(x.dataset.unwatch); client.watchRemove(x.dataset.unwatch); renderTasks(); }
+  if (!x) return;
+  const id = x.dataset.unwatch;
+  if (id.startsWith('task:')) {
+    // a scheduled task or reminder: ORION removes it by its words (the task_remove tool), quietly, no chat jump
+    ui.quietSend = true;
+    client.send(`Remove my scheduled task: ${id.slice(5)}`);
+    x.closest('.tk-item')?.classList.add('going');
+    return;
+  }
+  ui.watchGoing.add(id); client.watchRemove(id); renderTasks();
 });
 client.on('watch', (w) => {
   clearTimeout(watchWait);
@@ -1812,9 +1842,9 @@ const KIND_IC = {
 const KINDS = {
   always: { title: () => 'Watch for something', sub: 'ORION keeps checking and tells you the moment it happens.',
     note: () => '[New task · Always: keep checking this and tell me when it happens]' },
-  daily: { title: () => 'Do it every day', sub: 'ORION does it once a day, at the time you say.',
+  daily: { title: () => 'Do it every day', sub: 'ORION does the work himself once a day at the time you say, and reports back. Say “remind me” if you only want a nudge.',
     note: () => '[New task · Daily: do this every day]' },
-  scheduled: { title: (day) => `Plan for ${longDay(day)}`, sub: 'ORION files it on that day and reminds you.',
+  scheduled: { title: (day) => `Plan for ${longDay(day)}`, sub: 'ORION does it that day at the time you say and brings you the result. Say “remind me” if you only want a nudge.',
     note: (day) => `[New task · Scheduled for ${new Date(day).toLocaleDateString('en-US', { weekday: 'long' })} ${isoDay(day)}]` },
 };
 const ask = $('#tk-ask'), askIn = $('#tk-ask-in'), askGo = $('#tk-go');
@@ -1984,14 +2014,16 @@ function openTarget(t = {}) {
 /* pages: ORION, the conversation, the business                      */
 /* ================================================================ */
 
-const ROUTES = { '#/chat': 'chat', '#/business': 'business', '#/admin': 'admin' };
-const HASH = { home: '#/', chat: '#/chat', business: '#/business', admin: '#/admin' };
-const DASH = new Set(['business', 'admin']);      // full pages over the shader backdrop
+const ROUTES = { '#/chat': 'chat', '#/business': 'business', '#/admin': 'admin', '#/profile': 'profile' };
+const HASH = { home: '#/', chat: '#/chat', business: '#/business', admin: '#/admin', profile: '#/profile' };
+const DASH = new Set(['business', 'admin', 'profile']);      // full pages over the shader backdrop
 const biz = mountBusiness($('#biz'), { getMetrics: () => client.snapshot().metrics, tooltip: $('#tooltip') });
 const adm = mountAdmin($('#adm'), { client, onTokenCopied: () => haptic(6) });
+const prof = mountProfile($('#prof'), { client, onEmail: () => openEmail(), onSignOut: () => { haptic(8); go('home'); } });
 $('#summary').hidden = false;
 $('#biz').hidden = false;
 $('#adm').hidden = false;
+$('#prof').hidden = false;
 
 function go(r) {
   if (location.hash !== HASH[r] && !(r === 'home' && !location.hash)) history.pushState(null, '', HASH[r]);
@@ -2004,7 +2036,7 @@ function applyRoute() {
   const prev = ui.route;
   const qFrom = homeQSpot();
   ui.route = r;
-  ['home', 'chat', 'business', 'admin'].forEach((k) => body.classList.toggle(k, k === r));
+  ['home', 'chat', 'business', 'admin', 'profile'].forEach((k) => body.classList.toggle(k, k === r));
   body.classList.toggle('dash', DASH.has(r));
   setBackdrop(DASH.has(r), $('#shader'));
   $$('[data-route]').forEach((a) => {
@@ -2019,11 +2051,13 @@ function applyRoute() {
   if (r === 'business') { biz.render(); $('#biz').scrollTop = 0; }
   if (r === 'admin') { adm.open(); $('#adm').scrollTop = 0; }
   else if (prev === 'admin') adm.close();
+  if (r === 'profile') { prof.open(); $('#prof').scrollTop = 0; }
+  else if (prev === 'profile') prof.close();
   orbit.paused = DASH.has(r);
   if (r === 'chat') enterChat(prev == null);
   else if (prev === 'chat') feedInner.classList.remove('entering');
   if (ui.drawerOpen && !isWide()) closeDrawer();
-  document.title = r === 'business' ? 'Ciel · ORION' : r === 'admin' ? 'Admin · ORION' : r === 'chat' ? 'Conversation · ORION' : 'ORION';
+  document.title = r === 'business' ? 'Ciel · ORION' : r === 'admin' ? 'Admin · ORION' : r === 'profile' ? 'Profile · ORION' : r === 'chat' ? 'Conversation · ORION' : 'ORION';
   layout();
   if (r !== 'home') handOffHomeQ(r === 'chat', qFrom);
   if (prev != null) haptic(5);
@@ -2060,7 +2094,7 @@ const ASK = [
 ];
 const ASK_GUEST = [
   ['What’s the weather tomorrow?', 'Weather tomorrow'],
-  ['Set a timer for 10 minutes', 'Set a timer'],
+  ['Every morning at 8, summarize the news about AI', 'Schedule a daily task'],
   ['Research something for me', 'Research something'],
 ];
 /* ---------- the brief: ORION's "while you were gone", from the snapshot or a `brief` event ---------- */
