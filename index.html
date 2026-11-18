@@ -76,6 +76,9 @@
     <a class="rb" href="#/admin" data-route="admin" data-admin aria-label="Admin" data-tip="Admin">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8.5" r="3"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9.5" r="2.2"/><path d="M15.8 14.2c2.4-.4 4.3 1.1 4.7 4.3"/></svg>
     </a>
+    <a class="rb" href="#/profile" data-route="profile" aria-label="Profile" data-tip="Profile">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="3.6"/><path d="M5 19.5c1.3-3.3 3.9-5 7-5s5.7 1.7 7 5"/></svg>
+    </a>
     <span class="rail-sep"></span>
     <button class="rb" data-open="tasks" aria-label="Tasks" data-tip="Tasks">
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>
@@ -96,6 +99,9 @@
 
   <!-- Admin: every account, live (owner only) -->
   <main class="biz adm" id="adm" aria-label="Admin" hidden></main>
+
+  <!-- Profile: who you are to ORION, what he keeps about you, your title, sign out -->
+  <main class="biz prof" id="prof" aria-label="Profile" hidden></main>
 
   <div class="crumb" id="crumb"><span id="crumb-text">ORION overview</span></div>
 
@@ -203,6 +209,7 @@
       <a href="#/chat" data-route="chat"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6.5A2.5 2.5 0 0 1 7.5 4h9A2.5 2.5 0 0 1 19 6.5v7a2.5 2.5 0 0 1-2.5 2.5H11l-4 3.5V16h0.5"/><path d="M5 6.5V14a2 2 0 0 0 2 2"/></svg></i>Conversation</a>
       <a href="#/business" data-route="business" data-owner><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16"/><path d="M7 16v-4M12 16V7M17 16v-6"/></svg></i>Business</a>
       <a href="#/admin" data-route="admin" data-admin><i><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8.5" r="3"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9.5" r="2.2"/><path d="M15.8 14.2c2.4-.4 4.3 1.1 4.7 4.3"/></svg></i>Admin</a>
+      <a href="#/profile" data-route="profile"><i><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="3.6"/><path d="M5 19.5c1.3-3.3 3.9-5 7-5s5.7 1.7 7 5"/></svg></i>Profile</a>
     </nav>
     <div class="drawer-sec"><h3>Tasks</h3></div>
     <div class="tk-tabs" id="tk-tabs" role="tablist" aria-label="Kinds of task">
@@ -242,7 +249,7 @@
         <button type="button" class="tk-sheet-x" data-ask-cancel aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg></button>
       </div>
       <div class="tk-field">
-        <textarea id="tk-ask-in" rows="3" maxlength="600" placeholder="What should ORION do?" enterkeyhint="send" aria-labelledby="tk-ask-h"></textarea>
+        <textarea id="tk-ask-in" rows="3" maxlength="600" placeholder="What should ORION do? e.g. research NVIDIA’s week and write me a report at noon" enterkeyhint="send" aria-labelledby="tk-ask-h"></textarea>
         <button type="submit" class="tk-go" id="tk-go" aria-label="Send to ORION" aria-disabled="true">
           <svg class="up" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
           <svg class="ok" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
