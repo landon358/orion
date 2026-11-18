@@ -191,8 +191,9 @@ function placeOrbPhone(topH, dockH) {
   const size = ui.route === 'chat' ? (body.classList.contains('typing') ? 36 : 50) : big;
   const cy = $('#stage').clientHeight / 2;
   const prev = orbPh.at;
-  if (prev && prev.big === big && prev.size === size && Math.abs(prev.cy - cy) < 0.5) return;
-  const at = orbPh.at = { big, size, cy, small: false };
+  const w = innerWidth;
+  if (prev && prev.big === big && prev.size === size && prev.w === w && Math.abs(prev.cy - cy) < 0.5) return;
+  const at = orbPh.at = { big, size, cy, w, small: false };
   clearTimeout(orbPh.timer);
   const still = (styles) => { o.style.transition = 'none'; Object.assign(o.style, styles); void o.offsetWidth; o.style.transition = ''; };
   const box = (d, y) => ({ left: `${Math.round((innerWidth - d) / 2)}px`, top: `${(y - d / 2).toFixed(1)}px`, width: `${d}px`, height: `${d}px` });
@@ -360,7 +361,6 @@ function setDetail(open) {
   ui.detailOpen = open;
   body.classList.toggle('detail-open', open);
   if (!isWide()) $('#scrim').classList.toggle('on', open || ui.drawerOpen);
-  root.style.setProperty('--detail-drag', '0px');
   if (!open && ui.selected !== 'leo') { ui.selected = 'leo'; orbit.select(null); }
   layout();
 }
@@ -701,7 +701,9 @@ function fly(el, from, solid = false) {
   const c = el.cloneNode(true);
   c.className = 'fly';
   FLY_PROPS.forEach((k) => c.style.setProperty(k, cs.getPropertyValue(k)));
-  Object.assign(c.style, { left: `${to.left}px`, top: `${to.top}px`, width: `${to.width}px`, boxSizing: 'border-box', fontFamily: cs.fontFamily });
+  // on phones the page itself is shifted to follow the visible screen (fixed things move with it): place in its frame
+  const sh = body.getBoundingClientRect().top;
+  Object.assign(c.style, { left: `${to.left}px`, top: `${to.top - sh}px`, width: `${to.width}px`, boxSizing: 'border-box', fontFamily: cs.fontFamily });
   document.body.append(c);
   el.style.visibility = 'hidden';
   const dx = from.left - (to.left + parseFloat(cs.paddingLeft));
@@ -1072,10 +1074,12 @@ setPlaceholder();
 wideMQ.addEventListener('change', setPlaceholder);
 const form = $('#compose-form');
 function autosize() {
-  input.classList.toggle('empty', !input.value);
+  input.classList.toggle('is-empty', !input.value);
   if (!input.value && input.firstChild) input.textContent = '';   // drop a stray <br> so the placeholder shows
-  $('#btn-send').setAttribute('aria-disabled', String(!input.value.trim() && !ui.pics?.length));
+  updateSend();
 }
+/** Send is live when there's text or a picture to send. */
+function updateSend() { $('#btn-send').setAttribute('aria-disabled', String(!input.value.trim() && !ui.pics?.length)); }
 input.addEventListener('input', autosize);
 // a tap anywhere in the box's area (not just on the text line) puts the cursor in it
 $('#compose-form').addEventListener('click', (e) => { if (e.target !== input && !input.contains(e.target)) { input.focus(); input.setSelectionRange(); } });
@@ -1154,7 +1158,7 @@ function renderPics(loading = 0) {
   box.innerHTML = ui.pics.map((p, i) => `<span class="pic"><img src="${p.url}" alt="${esc(p.name)}"><button type="button" data-pic-x="${i}" aria-label="Remove ${esc(p.name)}">${X_SVG}</button></span>`).join('')
     + Array.from({ length: loading }, () => '<span class="pic loading" aria-label="Preparing picture"></span>').join('');
   $('#btn-plus').disabled = ui.pics.length >= PIC_MAX;
-  $('#btn-send').setAttribute('aria-disabled', String(!input.value.trim() && !ui.pics.length));
+  updateSend();
 }
 $('#pics').addEventListener('click', (e) => {
   const x = e.target.closest('[data-pic-x]');

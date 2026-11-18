@@ -134,7 +134,11 @@ export async function playIntro({ brand, force = false, gate = null } = {}) {
   const spot = (box, L) => { const ub = box.width / VB.w; return { x: box.left + (L.x0 - VB.x) * ub, y: box.top + (16 - VB.y) * ub, ub }; };
   const title = { width: Math.min(72, innerWidth * 0.2) };
   Object.assign(title, { left: (innerWidth - title.width) / 2, top: innerWidth < 600 ? 30 : 36 });
-  const dest = gate ? title : target?.getBoundingClientRect();
+  // the intro sits in the page's frame, which phones shift to follow the visible screen (keyboard up):
+  // measured rects are turned into that frame before anything is placed from them
+  const sh = el.getBoundingClientRect().top;
+  const local = (b) => b && { left: b.left, top: b.top - sh, width: b.width, height: b.height };
+  const dest = gate ? title : local(target?.getBoundingClientRect());
 
   /** The sphere glides into its place on the home screen and hands over to it; with a login, or
    *  when that sphere isn't on screen, it fades where it is. */
@@ -148,7 +152,7 @@ export async function playIntro({ brand, force = false, gate = null } = {}) {
     }
     const wrap = document.createElement('div');
     wrap.className = 'intro-orbfly';
-    Object.assign(wrap.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${orbD}px`, height: `${orbD}px` });
+    Object.assign(wrap.style, { left: `${r.left}px`, top: `${r.top - sh}px`, width: `${orbD}px`, height: `${orbD}px` });
     orbHost.getAnimations().forEach((a) => a.cancel());
     Object.assign(orbHost.style, { top: '0px', width: `${orbD}px`, height: `${orbD}px` });
     wrap.append(orbHost);
@@ -167,7 +171,7 @@ export async function playIntro({ brand, force = false, gate = null } = {}) {
     const r = orbHost.getBoundingClientRect(), to = seat.getBoundingClientRect();
     const wrap = document.createElement('div');
     wrap.className = 'intro-orbfly';
-    Object.assign(wrap.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${orbD}px`, height: `${orbD}px` });
+    Object.assign(wrap.style, { left: `${r.left}px`, top: `${r.top - sh}px`, width: `${orbD}px`, height: `${orbD}px` });
     orbHost.getAnimations().forEach((a) => a.cancel());
     orbHost.style.top = '0px';
     wrap.append(orbHost);
@@ -189,7 +193,7 @@ export async function playIntro({ brand, force = false, gate = null } = {}) {
       const L = landing[i];
       const r = t.getBoundingClientRect();
       // where the woven letter is now, and where its top-bar twin lands
-      const sx = r.left, sy = r.top;
+      const sx = r.left, sy = r.top - sh;
       const { x: tx, y: ty, ub } = spot(dest, L);
       const tw = (L.x1 - L.x0) * ub, th = 108 * ub;
       const k = (u * sC) / ub;
@@ -247,7 +251,7 @@ export async function playIntro({ brand, force = false, gate = null } = {}) {
     await panel.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(8px)' }], { duration: still ? 0 : 320, easing: 'ease-in', fill: 'both' }).finished;
     el.setAttribute('aria-hidden', 'true');
 
-    const b2 = target?.getBoundingClientRect();
+    const b2 = local(target?.getBoundingClientRect());
     const move = still || !b2 ? 0 : 1000;
     
     if (b2) flyers.forEach(({ fly, L, tx, ty, ub }, i) => {

@@ -50,7 +50,7 @@
      screen, and the iOS drawer curve. Everything else uses these, not hand-typed beziers. */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
-  --ease-drawer: var(--ease-drawer);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   --chat-l: 300px;    /* the column of tools on the left while chatting */
 }
 
@@ -672,7 +672,7 @@ body.dash .dock { opacity: 0; pointer-events: none; transform: translateX(-50%) 
   padding: 2px 0 6px; min-height: 48px; max-height: 132px; overflow-y: auto;
   white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; -webkit-user-select: text; user-select: text;
 }
-.ask-box.empty::before { content: attr(data-placeholder); position: absolute; left: 0; top: 2px; color: #8a8479; pointer-events: none; }
+.ask-box.is-empty::before { content: attr(data-placeholder); position: absolute; left: 0; top: 2px; color: #8a8479; pointer-events: none; }
 .ask-box:focus-visible { outline: none; }
 
 .dock-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
@@ -1319,7 +1319,7 @@ body.business #biz, body.admin #adm { opacity: 1; visibility: visible; transform
     padding-bottom: var(--sab);
     transition: transform 0.4s var(--ease-drawer);
   }
-  .detail-open .detail { transform: translateY(var(--detail-drag, 0px)); }
+  .detail-open .detail { transform: none; }
   .detail.dragging { transition: none; }
   .grab-zone { display: flex; justify-content: center; padding: 8px 0 2px; cursor: grab; touch-action: none; }
   .grabber { width: 38px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.25); }
