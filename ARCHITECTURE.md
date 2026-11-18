@@ -43,6 +43,8 @@ orion_server.py  (FastAPI, 127.0.0.1:8766)         one Orion, one state
  ├─ orion/utils_tools.py  deterministic utilities: units (pint), currency, date maths (dateparser), time zones, random, counts, passwords
  ├─ orion/quickinfo.py    news headlines (Google News RSS), stock/index/crypto quotes (Yahoo Finance), scores and schedules (ESPN); no keys, cached
  ├─ orion/lists.py        named lists and to-dos as data, per account;   orion/sandbox.py   python_run: sandboxed Python for maths/data/charts
+ ├─ orion/workflows.py    workflows as data (brain/workflows/*.json, Claude-written plans cached in data/workflow_plans.json); the runner
+ │                        executes steps through Orion._exec_call with retries, skip/stop, caps, pause on confirmation, state in data/workflow_runs.json
  ├─ orion/people.py       people cards per account (people.json): relation, dated notes, last contact, saved facts; cards of people named in a
  │                        message ride into the speaker and cloud context; owner's cards seeded from the guest accounts (14 friends)
  ├─ orion/embed.py        memory by meaning: nomic-embed-text index per account (facts, notes, journals, profile files); recall into every reply
@@ -151,8 +153,18 @@ the reason is reported. Surfaces: UI frames `cloud` / `cloud_master`, HTTP `/clo
 - **Heartbeat** (`Heartbeat.run_all`): per account. Owner's `brain/HEARTBEAT.md` against everything; a guest's
   own checklist against only their timers, notifications and last conversation. Alerts to that account only,
   deduped 24 h, empty list = no model call. Items come from chat (`watch_add`) or the UI (`watch_add` frame).
+  Code first (2026-11-17): `code_checks` decides what code can (printer paused/failed, routine in error, inbox over
+  a count, budget nearly spent) and `fingerprint` hashes the context minus clock noise; the model runs only when the
+  fingerprint changed (or a clock-dependent line exists and the hour moved). Log rows carry `mode`: skipped / code / model.
 - **Briefs**: owner = morning brief at 07:30 (Haiku, connectors, CIEL). Guest = free local "while you were away"
   on connect, cached 6 h (`data/briefs.json`).
+- **Workflows** (`orion/workflows.py`, added 2026-11-17): a plan is steps `{tool, args, say, on_fail}` with `{{param}}`,
+  `{{stepN}}` and `{{prev}}` templates. `workflow_run` (owner only) finds a saved plan by name, else a cached plan for the
+  normalised goal, else asks Haiku once for a plan (validated against the live tool list, cached). `Workflows.execute`
+  runs the steps through `Orion._exec_call` (so each step is guarded, audited and shown as a tool call), retries a failed
+  step twice, stops or skips per step, caps at 12 steps / 10 minutes, yields `task` events (`wf_<run>`, source
+  Workflows) and pauses when a step needs confirmation; the owner's yes resumes it (`after_confirm`, hooked in `_chat`).
+  Runs persist in `data/workflow_runs.json`; `workflow_resume` continues a paused or stopped run.
 - **Phone push** (`orion/push.py`, added 2026-11-17): the owner's bus events (reminders and other notifications,
   heartbeat alerts, routine results, the brief) and approvals are mirrored to a phone through ntfy (free app, a topic
   name) or Twilio SMS. `Bridge.seconds_since_owner_frame` tells it whether an owner device is active; if one sent a
