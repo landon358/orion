@@ -126,6 +126,11 @@ This file is the hand-off list between them. Each item names its owner. Update i
   (saved names); `style` items carry `n` and a change reply carries `result`; `email_alerts` has `pending: true` while a
   code is out; the final `message` has `sources` only when pages were read; `admin_snapshot.telemetry_7d` and
   `admin_snapshot.email_alerts` exist. Shapes in ORION-PROTOCOL.md "Backend notes".
+- New on the backend (night of 2026-11-18): background jobs. "In the background, research X" / "when you have a moment"
+  / "no rush" is answered at once ("Queued as job 1: ...") and the work arrives later as a `task` `job_<id>` with
+  `source: "Jobs"` (queued -> running -> done / rejected, `detail` = result), an activity line and a `notify` "Job done".
+  Show it like a workflow task. Desktop actions now save before/after screenshots into `files/desktop/` (the `files`
+  frame is re-sent after them). Pictures sent in chat are OCR'd first, so numbers in receipts and screenshots are exact.
 - **UI to build (Landon's request, 2026-11-18): the conversation tab opens with `snapshot.opening.text` as Orion's
   first line instead of the fixed "Evening, Commander" greeting, and replaces it when an `opening` event arrives.**
   Shape and rules in ORION-PROTOCOL.md "Backend additions: opening". Backend done and live.
@@ -139,6 +144,6 @@ This file is the hand-off list between them. Each item names its owner. Update i
 
 ## How each side tests against the other
 
-- Backend: `tests/test_ui_bridge.py` on the PC (54 live checks) proves every frame above against the running server.
+- Backend: `tests/test_ui_bridge.py` on the PC (55 live checks) proves every frame above against the running server.
 - UI: serve this repo on `localhost:8840` and open `?server=ws://localhost:8765&token=<owner token>` on the PC, or
   use the live Funnel address from anywhere with the login screen.
