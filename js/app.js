@@ -132,6 +132,7 @@ function layout() {
   root.style.setProperty('--dock-h', `${dockH}px`);
   const topH = $('#topbar').offsetHeight;
   if (isWide()) {
+    const innerWidth = document.documentElement.clientWidth;   // layout width: a zoomed page must not move him
     const right = ui.detailOpen ? 400 : 0;
     let box;
     let side = false;
@@ -187,18 +188,21 @@ new ResizeObserver(layout).observe($('#dock'));
 function placeOrbPhone(topH, dockH) {
   const o = $('#orbit');
   const appH = window.visualViewport?.height ?? innerHeight;
-  if (innerWidth !== orbPh.w) { orbPh.w = innerWidth; orbPh.maxH = 0; }
+  // the stage's own width, not innerWidth: on iOS innerWidth is the zoomed (visual) width, so any
+  // leftover zoom from a pinch or a double tap made it smaller than the page and the sphere sat left
+  const W = $('#stage').clientWidth || document.documentElement.clientWidth;
+  if (W !== orbPh.w) { orbPh.w = W; orbPh.maxH = 0; }
   orbPh.maxH = Math.max(orbPh.maxH, appH);
-  const big = Math.round(Math.max(60, Math.min(196, innerWidth * 0.5, (orbPh.maxH - topH - dockH) * 0.84)));
+  const big = Math.round(Math.max(60, Math.min(196, W * 0.5, (orbPh.maxH - topH - dockH) * 0.84)));
   const size = ui.route === 'chat' ? (body.classList.contains('typing') ? 36 : 50) : big;
   const cy = $('#stage').clientHeight / 2;
   const prev = orbPh.at;
-  const w = innerWidth;
+  const w = W;
   if (prev && prev.big === big && prev.size === size && prev.w === w && Math.abs(prev.cy - cy) < 0.5) return;
   const at = orbPh.at = { big, size, cy, w, small: false };
   clearTimeout(orbPh.timer);
   const still = (styles) => { o.style.transition = 'none'; Object.assign(o.style, styles); void o.offsetWidth; o.style.transition = ''; };
-  const box = (d, y) => ({ left: `${((innerWidth - d) / 2).toFixed(1)}px`, top: `${(y - d / 2).toFixed(1)}px`, width: `${d}px`, height: `${d}px` });
+  const box = (d, y) => ({ left: `${((W - d) / 2).toFixed(1)}px`, top: `${(y - d / 2).toFixed(1)}px`, width: `${d}px`, height: `${d}px` });
   const scaled = (y, d) => ({ ...box(big, big / 2), transform: `translateY(${(y - big / 2).toFixed(1)}px) scale(${(d / big).toFixed(4)})` });
   const settle = () => { if (orbPh.at === at) { still({ ...box(size, cy), transform: 'none' }); at.small = true; } };
   if (prev?.small && size !== big && prev.big === big) { settle(); return; }   // the keyboard in the conversation: snap
