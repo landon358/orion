@@ -47,6 +47,9 @@ orion_server.py  (FastAPI, 127.0.0.1:8766)         one Orion, one state
  │                        executes steps through Orion._exec_call with retries, skip/stop, caps, pause on confirmation, state in data/workflow_runs.json
  ├─ orion/people.py       people cards per account (people.json): relation, dated notes, last contact, saved facts; cards of people named in a
  │                        message ride into the speaker and cloud context; owner's cards seeded from the guest accounts (14 friends)
+ ├─ orion/jobs.py         job queue: "in the background, ..." hand-offs queued by code, run one at a time as ordinary turns when the GPU is
+ │                        free, results as `job` bus events (UI task job_<id>, banner, push, email); data/jobs.json
+ ├─ orion/ocr.py          RapidOCR (CPU, local) reads the exact text of pictures and screenshots; it goes to the vision model and into the result
  ├─ orion/embed.py        memory by meaning: nomic-embed-text index per account (facts, notes, journals, profile files); recall into every reply
  ├─ orion/research.py     search -> fetch -> chunk -> rank -> the few passages that answer, with sources; cached a day
  ├─ orion/privacy.py      redaction of keys, tokens, card/account numbers before anything goes to Claude
@@ -168,6 +171,28 @@ the reason is reported. Surfaces: UI frames `cloud` / `cloud_master`, HTTP `/clo
   step twice, stops or skips per step, caps at 12 steps / 10 minutes, yields `task` events (`wf_<run>`, source
   Workflows) and pauses when a step needs confirmation; the owner's yes resumes it (`after_confirm`, hooked in `_chat`).
   Runs persist in `data/workflow_runs.json`; `workflow_resume` continues a paused or stopped run.
+- **Job queue** (`orion/jobs.py`, added 2026-11-18): a request carrying a hand-off phrase (`JOB_CUES`: "in the background",
+  "when you have a moment", "no rush", "queue this") is answered at once by code ("Queued as job 3: ...") and run later by
+  one worker thread as an ordinary `Orion.chat` turn for that account (same tools, same limits), after `wait_idle` so a
+  live turn keeps the GPU. While `Orion.job_running` is set, `_exec_call` treats CONFIRM tools as it does for routines
+  (refused: nobody is there to say yes) and no job can queue another. Results go on the bus as `job` events (queued,
+  running, done, failed): the bridge shows a task `job_<id>` (source Jobs), an activity line and a banner; push and email
+  carry done/failed; the "while you were away" opening lists them. `job_list` / `job_cancel` by code (`JOB_STATUS`,
+  `JOB_CANCEL`), `job_start` also offered to the models. Jobs queued when Orion stops are marked lost, never re-run.
+- **OCR cross-check** (`orion/ocr.py`, added 2026-11-18): every picture read (`file_read`, chat `images`, `desktop_look`)
+  is first passed through RapidOCR; the exact text is given to the local vision model ("use these words and numbers as
+  they are") and appended to the tool result ("Text in the picture, read exactly by OCR"), so totals, order numbers and
+  names come from characters, not from the 9B's guess. Under a second per image, nothing leaves the PC, never raises.
+- **Desktop safety screenshots** (`orion/integrations/desktop.py`, added 2026-11-18): `desktop_click`, `desktop_type`
+  and `desktop_keys` are framed by two screenshots saved to `files/desktop/<time>-<action>-before|after.jpg` (newest 40
+  kept); the tool result names them and the UI Files panel refreshes, so the owner can see what Orion did.
+- **Confirmations** (`orion/safety.py` `is_yes`, 2026-11-18): while an action waits, "yes send it", "ok go ahead and
+  send", "send it", "oui envoie" count as yes (a yes-lead or the action's own verb, at most a few words, none of them a
+  change request such as "but", "instead", "cc", "?"); a change request still cancels the pending action and is treated
+  as a new request. And when a turn ends with an action waiting, the reply must ask: if the model's text claims the deed
+  was done or does not ask yes/no, code replaces it with "Not done yet, Commander. Waiting for your OK to ... Say yes to
+  proceed or no to cancel." (This fixed the sonnet email of 2026-11-17 that Orion said it had sent: "yes send it" was
+  not a strict yes, the pending send expired as a new request, and the 9B then wrote "sent" for a NOT DONE YET result.)
 - **Phone push** (`orion/push.py`, added 2026-11-17): the owner's bus events (reminders and other notifications,
   heartbeat alerts, routine results, the brief) and approvals are mirrored to a phone through ntfy (free app, a topic
   name) or Twilio SMS. `Bridge.seconds_since_owner_frame` tells it whether an owner device is active; if one sent a
