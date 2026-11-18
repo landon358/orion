@@ -1755,6 +1755,20 @@ body.chat .feed-inner { max-width: 720px; gap: 34px; }
 .tk-now-p, .tk-now-more { font: 500 0.8125rem var(--mono); color: var(--amber); }
 @keyframes tk-pulse { 50% { opacity: 0.35; } }
 
+/* Background: jobs and workflows */
+.tk-item.tk-bg { align-items: flex-start; }
+.bg-dot { flex: none; width: 8px; height: 8px; margin: 8px 2px 0 4px; border-radius: 50%; background: var(--text-3); }
+.tk-bg[data-st="running"] .bg-dot { background: var(--amber); box-shadow: 0 0 10px var(--amber); animation: tk-pulse 1.6s ease-in-out infinite; }
+.tk-bg[data-st="queued"] .bg-dot { background: transparent; border: 1.5px solid var(--text-3); }
+.tk-bg[data-st="done"] .bg-dot { background: var(--gold, #e8c47c); }
+.tk-bg[data-st="rejected"] .bg-dot { background: var(--coral, #ec6f5e); }
+.bg-detail {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  margin-top: 6px; padding: 0; text-align: left; font-size: 0.875rem; line-height: 1.45; color: var(--text-2); cursor: pointer;
+}
+.tk-bg.open .bg-detail { -webkit-line-clamp: unset; display: block; color: var(--text); }
+@media (prefers-reduced-motion: reduce) { .tk-bg[data-st="running"] .bg-dot { animation: none; } }
+
 /* calendar */
 .cal { padding: 4px 0 6px; }
 .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
@@ -2007,6 +2021,9 @@ body.chat .feed-inner { max-width: 720px; gap: 34px; }
 .msg-pics { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 .msg-pics img { width: 120px; height: 120px; object-fit: cover; border-radius: 12px; display: block; }
 .msg-pics:only-child { margin-bottom: 0; }
+/* a picture sent from another device: its name, since only that device has the preview */
+.pic-name { display: inline-flex; align-items: center; gap: 6px; max-width: 220px; padding: 6px 10px; border-radius: 10px; font-size: 0.8125rem; color: var(--text-2); background: rgba(255, 255, 255, 0.06); border: 1px solid var(--edge); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pic-name svg { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 
 /* email alerts dialog (shares the Describe-your-task card) */
 .em-ask .tk-ask-card h2 { margin-bottom: 8px; }

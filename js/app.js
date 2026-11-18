@@ -71,7 +71,7 @@ const UNDO_MS = 5000;
 const EXPLORE = { shopify: 'business', meta: 'business', clarity: 'business', gelato: 'business', planner: 'tasks' };
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 
-const client = createLeoClient();
+const client = await createLeoClient();
 
 /* ---------- who's logged in: the owner sees everything, other accounts only chat ---------- */
 // The mock and a token login with no account info behave as the owner.
@@ -378,7 +378,7 @@ client.on('vitals', (v) => {
   ui.tpsHistory.push(v.tps); ui.tpsHistory.shift();
   ui.gpuHistory.push(v.gpu); ui.gpuHistory.shift();
   renderStats();
-  if (ui.selected === 'leo') scheduleDetail();
+  if (ui.selected === 'leo') patchVitals();
 });
 
 // ORION can replace the tool list mid-session (rare): keep the vitals list and an open tool detail current
@@ -516,29 +516,48 @@ function renderDetail() {
     : 'ORION overview';
 }
 
-function leoDetail() {
-  const s = client.snapshot();
-  const v = s.vitals;
-  const running = s.tasks.filter((t) => t.status === 'running').length;
-  const waiting = s.approvals.filter((a) => a.status === 'pending').length;
-  const busy = ACTIVE.has(ui.state);
-  const badge = ui.state === 'needs-you' ? 'alert' : busy ? '' : 'idle';
+/* The parts of ORION's panel that move with every `vitals` frame (once a second). They carry
+   data-live so patchVitals() can swap just them; the rest (rules, files, tools, recent work) is
+   rebuilt only when it really changes. */
+function leoStatus(v) {
+  const badge = ui.state === 'needs-you' ? 'alert' : ACTIVE.has(ui.state) ? '' : 'idle';
+  return `<div class="st-text" data-live="status"><span class="badge ${badge}">${esc(ui.stateLabel)}</span><br>Up <b>${uptime(v.uptime)}</b> · last job <b>${agoLong(ui.lastJob)}</b></div>`;
+}
+function gpuMetric(v) {
   const prev = ui.gpuHistory.slice(0, 16).reduce((a, b) => a + b, 0) / 16;
-  return `
-    <div class="d-kicker">${ICON.leo}<span>Agent · runs on your PC</span></div>
-    <h2 class="d-title">ORION</h2>
-    <div class="d-status">
-      <div class="st-text"><span class="badge ${badge}">${esc(ui.stateLabel)}</span><br>Up <b>${uptime(v.uptime)}</b> · last job <b>${agoLong(ui.lastJob)}</b></div>
-      <button class="explore" data-drawer="tasks">Tasks ${ICON.chev}</button>
-    </div>
-    <div class="metric cool">
+  return `<div class="metric cool" data-live="gpu">
       <div class="metric-head"><span>GPU load</span><span class="badge outline">${v.gpu > 60 ? 'Busy' : 'Cool'} · ${v.temp}°C</span></div>
       <div class="metric-body">
         <span class="metric-val">${v.gpu}<small>%</small></span>
         ${delta(v.gpu - prev, 'vs 30s avg', ' pts')}
         ${histo(ui.gpuHistory)}
       </div>
+    </div>`;
+}
+function patchVitals() {
+  const el = $('#detail-body');
+  if (!el.querySelector('[data-live]')) return scheduleDetail();
+  const v = client.snapshot().vitals;
+  const parts = { status: leoStatus(v), gpu: gpuMetric(v), vitals: vitalsLive(v) };
+  for (const [k, html] of Object.entries(parts)) {
+    const n = el.querySelector(`[data-live="${k}"]`);
+    if (n) n.outerHTML = html;
+  }
+}
+
+function leoDetail() {
+  const s = client.snapshot();
+  const v = s.vitals;
+  const running = s.tasks.filter((t) => t.status === 'running').length;
+  const waiting = s.approvals.filter((a) => a.status === 'pending').length;
+  return `
+    <div class="d-kicker">${ICON.leo}<span>Agent · runs on your PC</span></div>
+    <h2 class="d-title">ORION</h2>
+    <div class="d-status">
+      ${leoStatus(v)}
+      <button class="explore" data-drawer="tasks">Tasks ${ICON.chev}</button>
     </div>
+    ${gpuMetric(v)}
     <div class="grid2">
       ${cell(ICON.play, running, 'Tasks running', 'data-drawer="tasks"')}
       ${cell(ICON.bell, waiting, 'Waiting on you', 'data-pop="1"')}
@@ -546,7 +565,7 @@ function leoDetail() {
     ${vitalsBlock(v)}
     ${rulesBlock()}
     ${canAct() ? filesBlock() : ''}
-    <div class="notes-head">${ICON.notes}Recent work</div>
+    <div class="notes-head" data-sec="activity">${ICON.notes}Recent work</div>
     ${notesFor('leo')}`;
 }
 
@@ -751,7 +770,7 @@ function addUserMessage(m) {
   const el = document.createElement('div');
   el.className = 'msg user';
   if (m.voice) el.innerHTML = `<span class="voice-tag">${ICON.mic}said aloud</span><br>`;
-  if (m.images?.length) el.insertAdjacentHTML('beforeend', `<span class="msg-pics">${m.images.map((p) => `<img src="${p.url}" alt="${esc(p.name ?? 'Picture')}">`).join('')}</span>`);
+  if (m.images?.length) el.insertAdjacentHTML('beforeend', `<span class="msg-pics">${m.images.map((p) => (p?.url ? `<img src="${p.url}" alt="${esc(p.name ?? 'Picture')}">` : `<span class="pic-name"><svg viewBox="0 0 24 24" aria-hidden="true">${FILE_IC.image}</svg>${esc((typeof p === 'string' ? p : p?.name) || 'Picture')}</span>`)).join('')}</span>`);
   if (m.text) el.append(document.createTextNode(m.text));
   feedInner.append(el);
   const w = document.createElement('div');
@@ -1023,9 +1042,11 @@ function welcome() {
   const greet = hour < 12 ? 'Morning' : hour < 18 ? 'Afternoon' : 'Evening';
   const done = s.tasks.filter((t) => t.status === 'done').length;
   const pending = s.approvals.filter((a) => a.status === 'pending').length;
+  // ORION's own first line (the "while you were away" summary) wins; the fixed greeting is the fallback
   upsertLeoMessage({
     id: 'welcome', role: 'leo', streaming: false,
-    text: client.mode === 'live'
+    text: client.opening?.text ? client.opening.text
+      : client.mode === 'live'
       ? `${greet}, ${address()}.${pending ? ` ${pending === 1 ? 'One approval is' : `${pending} approvals are`} waiting under the bell.` : ''}`
       : canAct()
       ? `${greet}. While you were away I finished ${done} tasks and kept an eye on Ciel.${pending ? ` ${pending === 1 ? 'One approval is' : `${pending} approvals are`} waiting under the bell.` : ''}`
@@ -1033,6 +1054,11 @@ function welcome() {
   });
   updateBadge();
 }
+// a newer opening line replaces the first message in place; it is never stored as a chat message
+client.on('opening', (o) => {
+  if (!ui.welcomed) return;
+  if (ui.messages.has('welcome')) upsertLeoMessage({ id: 'welcome', role: 'leo', streaming: false, text: o.text });
+});
 
 /* ================================================================ */
 /* dock: stats, ask, chips                                          */
@@ -1630,7 +1656,11 @@ const tasksOpen = () => ui.drawerOpen;
 const isHeartbeat = (a) => a.kind === 'think' && /heartbeat/i.test(a.title ?? '');
 const isRoutine = (t) => /^routine_/.test(t.id ?? '');
 const whenOf = (t) => t.due ?? t.next ?? t.at ?? null;
-const isDated = (t) => !isRoutine(t) && (/^timer_/.test(t.id ?? '') || (t.due ?? t.next) != null) && t.status !== 'done' && t.status !== 'rejected';
+// the routine's time of day where you are (the timestamps are UTC, so `% 864e5` would sort by UTC hour)
+const minuteOfDay = (ms) => { if (ms == null) return 0; const d = new Date(ms); return d.getHours() * 60 + d.getMinutes(); };
+// background work: jobs ("in the background, research X") and workflow runs; they live in their own list
+const isBackground = (t) => /^(job|wf)_/.test(t.id ?? '') || t.source === 'Jobs' || t.source === 'Workflows';
+const isDated = (t) => !isBackground(t) && !isRoutine(t) && (/^timer_/.test(t.id ?? '') || (t.due ?? t.next) != null) && t.status !== 'done' && t.status !== 'rejected';
 let watchWait = 0;
 ui.watchGoing = new Set();
 ui.tab = 'always';
@@ -1679,7 +1709,7 @@ function renderTasks() {
   }
 
   if (ui.tab === 'daily') {
-    const daily = s.tasks.filter(isRoutine).sort((a, b) => (whenOf(a) ?? 0) % 864e5 - (whenOf(b) ?? 0) % 864e5);
+    const daily = s.tasks.filter(isRoutine).sort((a, b) => minuteOfDay(whenOf(a)) - minuteOfDay(whenOf(b)));
     body = `
       <div class="tk-list">${daily.length ? daily.map((t) => `
         <div class="tk-item"><span class="tk-time">${whenOf(t) ? clockAt(whenOf(t)) : '—'}</span><span class="tk-t">${esc(t.title)}${t.every && !/day/i.test(t.every) ? `<small>every ${esc(t.every)}</small>` : ''}</span></div>`).join('')
@@ -1723,7 +1753,29 @@ function renderTasks() {
       ${upcoming.length ? `<h3 class="tk-sub">Coming up</h3><div class="tk-list">${upcoming.map((t) => row(t, true)).join('')}</div>` : ''}`;
   }
 
-  el.innerHTML = `<div class="tk-wrap">${now}${body}</div>`;
+  el.innerHTML = `<div class="tk-wrap">${now}${body}${backgroundBlock(s.tasks)}</div>`;
+}
+
+/* Background: jobs and workflows. Waiting and working ones first, then the last few finished,
+   each with its result text (`detail`), so a result stays readable after its banner is gone. */
+ui.bgOpen = new Set();
+const BG_STATUS = { queued: 'Waiting', running: 'Working', done: 'Done', rejected: 'Didn’t finish', 'needs-you': 'Needs you' };
+const bgTime = (t) => t.updatedAt ?? t.finishedAt ?? t.at ?? t.createdAt ?? 0;
+function backgroundBlock(tasks) {
+  const all = tasks.filter(isBackground);
+  if (!all.length) return '';
+  const live = all.filter((t) => t.status !== 'done' && t.status !== 'rejected').sort((a, b) => bgTime(b) - bgTime(a));
+  const past = all.filter((t) => t.status === 'done' || t.status === 'rejected').sort((a, b) => bgTime(b) - bgTime(a)).slice(0, 5);
+  const row = (t) => {
+    const st = t.status === 'running' && t.progress ? `Working · ${Math.round(t.progress * 100)}%` : BG_STATUS[t.status] ?? t.status ?? '';
+    const open = ui.bgOpen.has(t.id);
+    const title = esc(String(t.title ?? 'Background job').replace(/^Job \d+:\s*/, ''));
+    return `<div class="tk-item tk-bg${open ? ' open' : ''}" data-st="${esc(t.status ?? '')}">
+      <span class="bg-dot" aria-hidden="true"></span>
+      <span class="tk-t">${title}<small>${esc(st)}${bgTime(t) ? ` · ${ago(bgTime(t))}` : ''}</small>
+        ${t.detail ? `<button type="button" class="bg-detail" data-bg="${esc(t.id)}" aria-expanded="${open}">${esc(t.detail)}</button>` : ''}</span></div>`;
+  };
+  return `<h3 class="tk-sub">Background</h3><div class="tk-list">${[...live, ...past].map(row).join('')}</div>`;
 }
 
 $('#panel-tasks').addEventListener('click', (e) => {
@@ -1736,6 +1788,8 @@ $('#panel-tasks').addEventListener('click', (e) => {
   }
   const day = e.target.closest('[data-day]');
   if (day) { ui.cal.sel = Number(day.dataset.day); haptic(4); return renderTasks(); }
+  const bg = e.target.closest('[data-bg]');
+  if (bg) { const id = bg.dataset.bg; ui.bgOpen.has(id) ? ui.bgOpen.delete(id) : ui.bgOpen.add(id); return renderTasks(); }
   const x = e.target.closest('[data-unwatch]');
   if (x) { ui.watchGoing.add(x.dataset.unwatch); client.watchRemove(x.dataset.unwatch); renderTasks(); }
 });
@@ -1826,7 +1880,15 @@ function gauge(label, frac, val, sub) {
 function vitalsBlock(v) {
   const tools = client.snapshot().tools.map(describe);
   return `
-    <div class="notes-head">${ICON.chip}Vitals</div>
+    <div class="notes-head" data-sec="vitals">${ICON.chip}Vitals</div>
+    ${vitalsLive(v)}
+    <div class="notes-head">${ICON.tool}Tools</div>
+    <div class="group rows">
+      ${tools.map((t) => `<button type="button" class="row tool-row" data-tool="${esc(t.id)}"><span>${ICON[t.id] ?? ICON.tool}${esc(t.name)}</span><span class="v">${t.calls ?? 0} calls${t.lastUsed ? ` · ${ago(t.lastUsed)}` : ''}</span></button>`).join('')}
+    </div>`;
+}
+function vitalsLive(v) {
+  return `<div data-live="vitals">
     <div class="gauges">
       ${gauge('VRAM', v.vram / v.vramTotal, v.vram.toFixed(1), `of ${v.vramTotal} GB`)}
       ${gauge('Temp', (v.temp - 30) / 55, `${v.temp}°`, 'celsius')}
@@ -1844,9 +1906,6 @@ function vitalsBlock(v) {
       <div class="row"><span>Voice</span><span class="v">Whisper + Kokoro</span></div>
       <div class="row"><span>Connection</span><span class="v">${client.mode === 'mock' ? 'Demo data' : 'Tailscale'}</span></div>
     </div>
-    <div class="notes-head">${ICON.tool}Tools</div>
-    <div class="group rows">
-      ${tools.map((t) => `<button type="button" class="row tool-row" data-tool="${esc(t.id)}"><span>${ICON[t.id] ?? ICON.tool}${esc(t.name)}</span><span class="v">${t.calls ?? 0} calls${t.lastUsed ? ` · ${ago(t.lastUsed)}` : ''}</span></button>`).join('')}
     </div>`;
 }
 
@@ -1896,13 +1955,25 @@ function showBanner(n) {
     const vel = t1 > t0 ? ((y1 - y0) / (t1 - t0)) * 1000 : 0;
     if (moved < 6) {
       dismiss();
-      if (n.target?.approvalId) { ui.expanded.add(n.target.approvalId); setPop(true); }
-      else openDrawer();
+      openTarget(n.target);
       return;
     }
     if (y + project(vel) < -40) dismiss(vel);
     else { run(0, vel); timer = setTimeout(() => dismiss(), 4000); }
   });
+}
+
+/* Where a banner tap lands: an approval opens under the bell; `panel: "activity"` (job and routine
+   results) opens ORION's panel at Recent work, `"vitals"` at Vitals; anything else opens Tasks. */
+function openTarget(t = {}) {
+  if (t.approvalId) { ui.expanded.add(t.approvalId); setPop(true); return; }
+  if (t.panel === 'activity' || t.panel === 'vitals') {
+    if (ui.drawerOpen) closeDrawer();
+    select('leo');
+    requestAnimationFrame(() => $(`#detail-body [data-sec="${t.panel}"]`)?.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }));
+    return;
+  }
+  openDrawer();
 }
 
 /* ================================================================ */
@@ -2140,7 +2211,10 @@ function emShow(step, msg = '', bad = false) {
 
 function openEmail() {
   const st = emState();
-  emShow(st?.verified ? 'on' : st?.email && st.sent !== false && !st.verified && ui.em.pending ? 'code' : 'ask');
+  // a code is still out (ORION says `pending`, which survives a reload): go straight to typing it, so a
+  // second code isn't asked for (3 an hour, then an hour's lockout)
+  const codeOut = !!st?.email && !st.verified && (st.pending === true || (st.sent !== false && !!ui.em.pending));
+  emShow(st?.verified ? 'on' : codeOut ? 'code' : 'ask');
   if (ui.em.step === 'ask') emIn.value = st?.email || ui.em.pending || '';
   emCode.value = '';
   em.hidden = false;
@@ -2157,7 +2231,7 @@ function emBusy(text) {
   em.classList.add('busy');
   emMsg.textContent = text; emMsg.classList.remove('bad');
   clearTimeout(ui.em.wait);
-  ui.em.wait = setTimeout(() => { em.classList.remove('busy'); emMsg.textContent = 'ORION didn’t answer. Email alerts need an update on ORION’s side first.'; emMsg.classList.add('bad'); }, 12000);
+  ui.em.wait = setTimeout(() => { em.classList.remove('busy'); emMsg.textContent = 'ORION didn’t answer. Check that he’s online, then try again.'; emMsg.classList.add('bad'); }, 12000);
 }
 
 emForm.addEventListener('submit', (e) => {
