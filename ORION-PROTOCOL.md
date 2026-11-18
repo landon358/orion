@@ -368,6 +368,33 @@ The local model has vision. The composer can attach up to 4 pictures, resized in
 - `text` may be empty when only a picture is sent.
 - Reject anything over 4 images or 6 MB in total with an `error` frame.
 
+### 5b. Email alerts (every account; chosen instead of SMS on 2026-11-17)
+
+Each person can give an email address and get their own alerts there. The UI asks once after login (and from an
+envelope button in the top bar), then confirms the address with a 6-digit code ORION emails, so nobody can sign
+someone else up.
+
+```json
+{ "type": "email_set",    "data": { "email": "kyle@example.com" } }
+{ "type": "email_verify", "data": { "code": "482913" } }
+{ "type": "email_on",     "data": { "on": false } }
+{ "type": "email_remove", "data": {} }
+
+{ "type": "email_alerts", "data": { "email": "kyle@example.com", "verified": false, "on": false, "sent": true } }
+{ "type": "email_alerts", "data": { "email": "kyle@example.com", "verified": true,  "on": true } }
+{ "type": "email_alerts", "data": { "email": "kyle@example.com", "verified": false, "on": false,
+  "error": "That code isn’t right. Check the latest email from ORION." } }
+{ "type": "email_alerts", "data": { "email": null, "verified": false, "on": false } }
+```
+
+- `snapshot.email_alerts` carries the same object (or is omitted when the account has none).
+- `email_set`: validate the address, send a 6-digit code that expires after 15 minutes, reply with `sent: true`.
+  Rate-limit: at most 3 codes per account per hour (`error` otherwise). A new `email_set` replaces an unverified
+  address; changing a verified address needs the new code before it takes over.
+- `email_verify`: 5 wrong codes lock it for an hour. A correct code sets `verified: true, on: true`.
+- `email_on {on}` pauses or resumes; `email_remove` forgets the address.
+- Every reply goes to all devices of that account, so a second device's dialog stays in step.
+
 ### 6. Sources on web answers (optional, nicer than parsing)
 
 Web answers end with a "Sources" line today; the UI turns that line into small links. If the final `message`

@@ -1774,3 +1774,119 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.se
 
 // Debug handle for local testing only.
 if (location.hostname === 'localhost') window.__leo = { client, ui, orbit, go };
+
+/* ================================================================ */
+/* email alerts: ORION emails each person their own alerts           */
+/* ================================================================ */
+// Proposed frames (ORION-PROTOCOL.md "Proposed"): email_set {email} -> ORION mails a 6-digit code;
+// email_verify {code}; email_on {on}; email_remove {}. Every answer is an `email_alerts`
+// {email, verified, on, sent?, error?} frame, and the snapshot carries `email_alerts` too.
+const em = $('#em-ask'), emForm = $('#em-form'), emIn = $('#em-in'), emCode = $('#em-code'), emMsg = $('#em-msg');
+const EM_ASKED = () => `orion-email-asked:${account()?.id ?? 'me'}`;
+const emAsked = () => { try { return localStorage.getItem(EM_ASKED()) === '1'; } catch { return false; } };
+const emMarkAsked = () => { try { localStorage.setItem(EM_ASKED(), '1'); } catch {} };
+ui.em = { step: 'ask', pending: '', wait: 0 };
+
+function emState() { return client.email ?? null; }
+function emDot() { $('#email-dot').hidden = !!emState()?.verified || emAsked(); }
+
+function emShow(step, msg = '', bad = false) {
+  ui.em.step = step;
+  const st = emState();
+  const mail = st?.email || ui.em.pending;
+  const who = canAct() ? 'something needs your OK, a reminder is due, or something you asked him to watch happens'
+    : 'a reminder is due or something you asked him to watch happens';
+  const demo = client.mode === 'mock' ? ' (Demo: any 6 digits works.)' : '';
+  const T = {
+    ask: ['Get ORION’s alerts by email', `ORION will email you when ${who}. A few a week at most, and every email has a link to stop them.`, 'Send code', 'Not now', ''],
+    code: ['Check your email', `Enter the 6-digit code ORION sent to ${mail}.${demo}`, 'Confirm', 'Cancel', 'Use a different email'],
+    on: [st?.on === false ? 'Email alerts are paused' : 'Email alerts are on', st?.on === false ? `Nothing is sent to ${mail} until you turn them back on.` : `ORION sends your alerts to ${mail}.`, 'Done', st?.on === false ? 'Turn on' : 'Pause', 'Remove email'],
+  }[step];
+  $('#em-h').textContent = T[0];
+  $('#em-p').textContent = T[1];
+  $('#em-go').textContent = T[2];
+  $('#em-cancel').textContent = T[3];
+  $('#em-side').textContent = T[4];
+  $('#em-side').hidden = !T[4];
+  emIn.hidden = step !== 'ask';
+  emCode.hidden = step !== 'code';
+  emMsg.textContent = msg;
+  emMsg.classList.toggle('bad', bad);
+  em.classList.remove('busy');
+}
+
+function openEmail() {
+  const st = emState();
+  emShow(st?.verified ? 'on' : st?.email && st.sent !== false && !st.verified && ui.em.pending ? 'code' : 'ask');
+  if (ui.em.step === 'ask') emIn.value = st?.email || ui.em.pending || '';
+  emCode.value = '';
+  em.hidden = false;
+  emMarkAsked(); emDot();
+  requestAnimationFrame(() => { em.classList.add('on'); (ui.em.step === 'code' ? emCode : ui.em.step === 'ask' ? emIn : $('#em-go')).focus(); });
+  haptic(6);
+}
+function closeEmail() {
+  clearTimeout(ui.em.wait);
+  em.classList.remove('on');
+  setTimeout(() => { if (!em.classList.contains('on')) em.hidden = true; }, 220);
+}
+function emBusy(text) {
+  em.classList.add('busy');
+  emMsg.textContent = text; emMsg.classList.remove('bad');
+  clearTimeout(ui.em.wait);
+  ui.em.wait = setTimeout(() => { em.classList.remove('busy'); emMsg.textContent = 'ORION didn’t answer. Email alerts need an update on ORION’s side first.'; emMsg.classList.add('bad'); }, 12000);
+}
+
+emForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  if (em.classList.contains('busy')) return;
+  if (ui.em.step === 'ask') {
+    const v = emIn.value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)) { emMsg.textContent = 'That doesn’t look like an email address.'; emMsg.classList.add('bad'); emIn.focus(); return; }
+    ui.em.pending = v;
+    client.emailSet(v);
+    emBusy('Sending a code…');
+  } else if (ui.em.step === 'code') {
+    const c = emCode.value.replace(/\D/g, '');
+    if (c.length !== 6) { emMsg.textContent = 'The code is 6 digits.'; emMsg.classList.add('bad'); emCode.focus(); return; }
+    client.emailVerify(c);
+    emBusy('Checking…');
+  } else closeEmail();
+});
+$('#em-cancel').addEventListener('click', () => {
+  if (ui.em.step === 'on') { client.emailOn(emState()?.on === false); emBusy(''); return; }
+  closeEmail();
+});
+$('#em-side').addEventListener('click', () => {
+  if (ui.em.step === 'code') { emShow('ask'); emIn.value = ui.em.pending; emIn.focus(); return; }
+  if (ui.em.step === 'on') { client.emailRemove(); emBusy('Removing…'); }
+});
+emCode.addEventListener('input', () => { emCode.value = emCode.value.replace(/\D/g, '').slice(0, 6); if (emCode.value.length === 6) emForm.requestSubmit(); });
+em.addEventListener('click', (e) => { if (e.target === em) closeEmail(); });
+em.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); closeEmail(); } });
+$('#btn-email').addEventListener('click', openEmail);
+
+client.on('email_alerts', (st) => {
+  emDot();
+  if (em.hidden) return;
+  clearTimeout(ui.em.wait);
+  if (st.error) { emShow(ui.em.step, st.error, true); (ui.em.step === 'code' ? emCode : emIn).focus(); return; }
+  if (st.verified) { emShow('on', ui.em.step === 'code' ? 'You’re all set.' : ''); $('#em-go').focus(); return; }
+  if (!st.email) { ui.em.pending = ''; emShow('ask', ui.em.step === 'on' ? 'Removed. ORION won’t email you.' : ''); emIn.value = ''; return; }
+  if (st.sent) { emShow('code'); emCode.value = ''; emCode.focus(); }
+});
+
+// ask once per account on this device, a moment after ORION connects
+client.on('connection', ({ status }) => {
+  if (status !== 'online') return;
+  emDot();
+  if (emState()?.verified || emAsked()) return;
+  let tries = 0;
+  const later = () => setTimeout(() => {
+    if (emState()?.verified || emAsked()) return;
+    const busy = !$('#tk-ask').hidden || !em.hidden || ui.drawerOpen || document.querySelector('.intro, .login');
+    if (!busy) openEmail();
+    else if (++tries < 12) later();
+  }, 2500);
+  later();
+});

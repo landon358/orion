@@ -158,6 +158,7 @@ export class MockLeoClient extends Emitter {
   watch = { items: [], every_minutes: 30 };   // the heartbeat checklist: {items: [{id, n, text}], every_minutes}
   files = null;                       // {items: [{path, name, size, modified, kind}]}: what ORION made (owner)
   style = null;                       // {items: [{id, text}]}: this account's standing rules
+  email = null;                       // {email, verified, on}: email alerts for this account (proposed)
   cloud = null;                       // Local / Local+: {mode, on, own, master, configured, allowance_left_usd, budget_remaining_usd, reason}
   admin = null;                       // the owner's master view (ACCOUNTS.md §6), while it's switched on
   #busy = false;
@@ -193,6 +194,16 @@ export class MockLeoClient extends Emitter {
     setTimeout(() => this.emit('file', { path, name: f?.name ?? path, mime: 'text/plain', data: btoa(body) }), 300);
   }
   styleList() { setTimeout(() => this.emit('style', this.style), 200); }
+  emailSet(email) { setTimeout(() => { this.email = { email, verified: false, on: false, sent: true }; this.emit('email_alerts', this.email); }, 700); }
+  emailVerify(code) {
+    setTimeout(() => {
+      if (code === '000000') return this.emit('email_alerts', { ...this.email, error: 'That code isn’t right. Check the latest email from ORION.' });
+      this.email = { email: this.email?.email, verified: true, on: true };
+      this.emit('email_alerts', this.email);
+    }, 600);
+  }
+  emailOn(on) { setTimeout(() => { this.email = { ...this.email, on }; this.emit('email_alerts', this.email); }, 300); }
+  emailRemove() { setTimeout(() => { this.email = { email: null, verified: false, on: false }; this.emit('email_alerts', this.email); }, 300); }
   styleAdd(text) {
     setTimeout(() => { this.style = { items: [...this.style.items, { id: `s${Date.now().toString(36)}`, text }] }; this.emit('style', this.style); }, 400);
   }
@@ -697,6 +708,7 @@ export class RealLeoClient extends Emitter {
   watch = { items: [], every_minutes: 30 };   // the heartbeat checklist: {items: [{id, n, text}], every_minutes}
   files = null;                       // {items: [{path, name, size, modified, kind}]}: what ORION made (owner)
   style = null;                       // {items: [{id, text}]}: this account's standing rules
+  email = null;                       // {email, verified, on}: email alerts for this account (proposed)
   cloud = null;                       // Local / Local+: {mode, on, own, master, configured, allowance_left_usd, budget_remaining_usd, reason}
   admin = null;                       // the owner's master view (ACCOUNTS.md §6): the last admin_snapshot, kept current
   #adminWanted = false;               // re-asked for after a reconnect
@@ -791,6 +803,7 @@ export class RealLeoClient extends Emitter {
         if (data.account) this.account = data.account;
         this.brief = data.brief ?? null;
         if (data.watch) this.watch = data.watch;
+        this.email = data.email_alerts ?? null;
         this.cloud = data.cloud ?? null;
         if (this.#adminWanted) this.#raw({ type: 'admin', data: { on: true } });
         this.styleList();
@@ -831,6 +844,7 @@ export class RealLeoClient extends Emitter {
       case 'files': this.files = data; return this.emit('files', data);
       case 'file': return this.emit('file', data);
       case 'style': this.style = data; return this.emit('style', data);
+      case 'email_alerts': this.email = data; return this.emit('email_alerts', data);
       case 'cloud': this.cloud = data; return this.emit('cloud', data);
       case 'route': return this.emit('route', data);
       case 'admin_snapshot': this.admin = data; return this.emit('admin_snapshot', data);
@@ -870,6 +884,11 @@ export class RealLeoClient extends Emitter {
   styleList() { this.#raw({ type: 'style_list', data: {} }); }
   styleAdd(text) { this.#cmd('style_add', { text }); }
   styleRemove(id) { this.#cmd('style_remove', { id }); }
+  /** Email alerts (proposed): ORION mails a code, the person types it back, then alerts go to that address. */
+  emailSet(email) { this.#cmd('email_set', { email }); }
+  emailVerify(code) { this.#cmd('email_verify', { code }); }
+  emailOn(on) { this.#cmd('email_on', { on: !!on }); }
+  emailRemove() { this.#cmd('email_remove', {}); }
   approve(id) { this.#cmd('approve', { id }); }
   reject(id) { this.#cmd('reject', { id }); }
   setListening(on) { this.#raw({ type: 'listening', data: { on } }); }

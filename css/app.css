@@ -1840,3 +1840,26 @@ body.chat .feed-inner { max-width: 720px; gap: 34px; }
 .msg-pics { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 .msg-pics img { width: 120px; height: 120px; object-fit: cover; border-radius: 12px; display: block; }
 .msg-pics:only-child { margin-bottom: 0; }
+
+/* email alerts dialog (shares the Describe-your-task card) */
+.em-ask .tk-ask-card h2 { margin-bottom: 8px; }
+.em-p { font-size: 0.9375rem; line-height: 1.5; color: var(--text-2); margin-bottom: 16px; }
+.em-in {
+  width: 100%; height: 50px; padding: 0 16px; border-radius: 16px;
+  font: 400 1rem var(--font); color: var(--text);
+  background: rgba(0, 0, 0, 0.3); border: 1px solid var(--edge); outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.em-in:focus { border-color: rgba(246, 223, 174, 0.4); box-shadow: 0 0 0 4px rgba(246, 223, 174, 0.06); }
+.em-in::placeholder { color: var(--text-3); }
+.em-in[hidden] { display: none; }
+.em-code { font: 500 1.375rem var(--mono); letter-spacing: 0.35em; text-align: center; }
+.em-code::placeholder { font: 400 1rem var(--font); letter-spacing: 0; }
+.em-msg { min-height: 1.25em; margin-top: 10px; font-size: 0.8125rem; color: var(--text-2); }
+.em-msg.bad { color: var(--coral); }
+.em-ask .tk-ask-foot .spacer { flex: 1; }
+.em-link { font-size: 0.8125rem; color: var(--text-2); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: rgba(255, 255, 255, 0.25); }
+.em-link:hover { color: var(--text); }
+.em-ask.busy #em-go { opacity: 0.55; pointer-events: none; }
+#btn-email { position: relative; }
+#btn-email svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
