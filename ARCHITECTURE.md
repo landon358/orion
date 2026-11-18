@@ -52,8 +52,9 @@ orion_server.py  (FastAPI, 127.0.0.1:8766)         one Orion, one state
  ├─ orion/privacy.py      redaction of keys, tokens, card/account numbers before anything goes to Claude
  ├─ orion/metrics.py      the Business page `metrics` object from Shopify + Clarity (+ Meta); routine metrics_refresh, Bridge.set_metrics
  ├─ orion/push.py         phone push (ntfy or Twilio SMS), owner only: bus banners + approvals, skipped while an owner device is active
- ├─ orion/mail_alerts.py  email alerts for every account from a dedicated ORION Gmail: verified addresses (6-digit codes), caps, quiet hours,
- │                        bundling, unsubscribe links; state in data/users.json + data/email_alerts_state.json
+ ├─ orion/mail_alerts.py  email alerts for every account from ORION's own address (Resend on the web app's domain, or a Gmail made for ORION
+ │                        over SMTP): verified addresses (6-digit codes), caps, quiet hours, bundling, unsubscribe links; state in data/users.json
+ │                        + data/email_alerts_state.json; setup orion_connect.py email-alerts (UI repo EMAIL-SETUP.md)
  ├─ orion/users.py        accounts: owner + guests, tokens, passwords (PBKDF2), budgets, the own Local+ switch
  ├─ orion/safety.py       risk tiers READ/LOW/CONFIRM/CRITICAL, Guard, leases, approval rules, audit log
  ├─ orion/tools.py        core tools, which ones guests get, cue regexes that decide which tools the 9B is offered
