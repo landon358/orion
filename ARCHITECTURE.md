@@ -206,6 +206,9 @@ the reason is reported. Surfaces: UI frames `cloud` / `cloud_master`, HTTP `/clo
 - **Memory**: facts auto-extracted at journal time (idle 15 min or shutdown); rolling notes when history exceeds
   the window; `memory_search/list/read` tools; owner-only `memory_write` with backups in `brain/.history/`;
   Orion keeps `brain/SELF.md` current and writes `brain/proposals/*.md` for code changes it cannot make.
+  `forget` (CONFIRM) and its preview use `Brain.matches`: every meaningful word of the phrase must occur at a word
+  start in the fact (all but one when there are three or more) and function words such as "for" never count, so a
+  forget can only reach the facts the phrase names (fixed 2026-11-18; before, any word matched as a substring).
 - **Knowing the owner**: `brain/OWNER.md` (profile: CIEL, friends, tools, preferences) is injected into the local
   speaker on `OWNER_Q` questions and into every owner cloud turn; guests never get it (`Brain.owner_text`).
 - **People cards** (`orion/people.py`, added 2026-11-17): tools `person_note` (dated note, creates the card, a contact verb
