@@ -60,6 +60,13 @@ This file is the hand-off list between them. Each item names its owner. Update i
 - Files Orion made: HTTP `GET /files` and `GET /files/download?path=` exist (owner token). A socket frame listing new
   files (`files {items}`) could be added if the UI wants a panel.
 
+- **Done 2026-11-18 (backend):** every request below is implemented and documented under "Implemented on the backend"
+  in ORION-PROTOCOL.md, each with "Backend notes" where the shape differs slightly from the proposal (task ids and
+  sources, the `pending` flag on email alerts, `n`/`result` on style lists, `images` echoed on the user message,
+  `telemetry_7d`). Guest profiles from GUEST-PROFILES.md are in each guest's own folder (`PROFILE.md`) and ride into
+  only that guest's turns. Kyle's morning report and Blake's career notes still need the owner's call on cost (see below).
+  Live checks: `tests/test_ui_bridge.py` on the PC, 54 checks.
+
 - **Requested by the UI (2026-11-17), shapes in ORION-PROTOCOL.md "Proposed":** (1) `every`/`next`/`due` on
   routine, timer and reminder tasks, so the new Tasks page's Daily and Scheduled tabs fill in; (2) the
   "Describe your task" `send` with a `task {kind, date?}` hint: always -> watch item, daily -> routine,
@@ -68,19 +75,28 @@ This file is the hand-off list between them. Each item names its owner. Update i
   (5) `images` on `send` for pictures in chat; (6) optional `sources` on the final message; (7) document the
   `telemetry` fields in the admin snapshot.
 
-- **Email alerts (requested 2026-11-17).** UI is built (pop-up + top-bar button); frames in ORION-PROTOCOL.md
-  "Proposed" 5b. Landon chose email over SMS for everyone. The natural home is a new email channel in
-  `orion/push.py` (same quiet hours, dedupe and "skip while a device is active" logic), but for **every account**,
-  each to their own verified address; push.py's ntfy/SMS stay owner-only. Backend to build:
+- **Email alerts: done on the backend 2026-11-18** as `orion/mail_alerts.py`, following the plan below point by point
+  (codes hashed with 15-minute expiry, 3 codes an hour, 5 wrong codes lock an hour; 3 emails per account per day and 10
+  a day overall; quiet hours 22:00 to 07:00 held and sent at 07:00; bundling within 10 minutes; skipped while a device of
+  that account is active; privacy redaction; plain text + HTML; `List-Unsubscribe` and a footer link to
+  `https://<funnel>/u/<account>/<token>` on the UI port, which only turns alerts off; emails to Orion's address are never
+  read as commands). Both senders are built: **Resend** (default, the EMAIL-SETUP.md plan: one HTTPS call per email, one
+  recipient, 429/5xx retried once, `reply_to`) and SMTP through a Gmail made for ORION. The backend's names differ a
+  little from EMAIL-SETUP.md's first draft and that file now says so: the key lives at
+  `Orion-assistant / email_alerts:resend_api_key`, the sender in `config.json -> email_alerts {provider, from_address,
+  display_name, reply_to}`, and the setup command is `orion_connect.py email-alerts` (`orion_connect.py email` is the
+  owner's Gmail *reading* connector and stays as it is). **Landon:** follow EMAIL-SETUP.md, run `email-alerts`, restart
+  Orion. Until then `email_set` answers with the "not set up" error above. The plan, for reference:
   1. **Sending: Resend (changed 2026-11-17, replaces the Gmail plan).** Landon is buying a domain for the web app,
      so ORION sends from it, e.g. `orion@alerts.<domain>`, display name "ORION", through Resend (free tier: 3,000 a
      month, 100 a day; expected volume about 50 a week). Setup steps for Landon are in EMAIL-SETUP.md. Backend:
-     - API key in Credential Manager (`Orion-assistant / email:resend_api_key`); `from`, `reply_to` and the site URL
-       in `config.json`. Never in this repo.
+     - API key in Credential Manager (`Orion-assistant / email_alerts:resend_api_key`); `from_address`, `reply_to` in
+       `config.json -> email_alerts`; the site URL is `server.ui_url`. Never in this repo.
      - Send with one HTTPS call, `POST https://api.resend.com/emails` (Bearer key; `from`, `to`, `subject`, `text`,
-       `html`, `headers` for `List-Unsubscribe`), or the `resend` Python package. One recipient per email, never
-       a shared To/CC. Retry 429/5xx with backoff; log failures to the admin snapshot, never the key.
-     - Add `python orion_connect.py email` to prompt for the key with hidden input and store it, then send a test.
+       `html`, `headers` for `List-Unsubscribe`, `reply_to`). One recipient per email, never a shared To/CC. Retry
+       429/5xx once with backoff; failures land in the admin snapshot (`email_alerts.last_error`), never the key.
+     - `orion_connect.py email-alerts` prompts for the provider, the address and the key with hidden input, stores
+       them, and sends a test.
      - Until the domain is verified, Resend's test sender (`onboarding@resend.dev`) only delivers to the Resend
        account's own address, so only the owner can be tested; guests start once DNS is verified.
   2. **Storage:** each account's address, verified flag and on/off in `data/users.json` (PC only, never in this
@@ -103,11 +119,16 @@ This file is the hand-off list between them. Each item names its owner. Update i
 
 ## Open: UI (this repo's session owns these)
 
-- `js/tools.js` header comment still says 10 bands and lists `shopify` under "older ids": the backend sends 11 bands
-  for the owner (`memory, planner, web, files, voice, email, shopify, meta, clarity, github, printer`) and `shopify`
-  is live (read-only CIEL store once connected). Cosmetic.
-- `files` band: the backend now reads documents, spreadsheets, PDFs and images and creates text files and
-  spreadsheets. Its skills line (`Downloads`, `Briefs`) could say `Read`, `Create` and the group "ORION machine" fits.
+- Done 2026-11-17: `js/tools.js` lists 11 bands; `files` skills are Read / Create; Shopify is marked read-only.
+- Done 2026-11-17: the Files panel and "Your rules" are built in ORION's panel; the frames are live on the backend now.
+- To check against the live backend (2026-11-18): task `source` values are `Routine`, `Reminder`, `Timer`, `Planner`
+  (dated reminders), `Workflows`; dated-reminder ids start with `reminder_`; the echoed user `message` has `images`
+  (saved names); `style` items carry `n` and a change reply carries `result`; `email_alerts` has `pending: true` while a
+  code is out; the final `message` has `sources` only when pages were read; `admin_snapshot.telemetry_7d` and
+  `admin_snapshot.email_alerts` exist. Shapes in ORION-PROTOCOL.md "Backend notes".
+- Owner decisions still open from GUEST-PROFILES.md: Kyle's niche-market morning report (needs a guest routine or a
+  line in his brief, plus research spend) and Blake's career notes (the people-card tools can hold them). The backend
+  can add a per-guest brief line once Landon says yes.
 - The Business page can keep its sample note until `metrics` arrives; nothing to change. When Shopify lands, the
   backend's `days` will start with Shopify history (orders/revenue for 60 days) but `sessions`/`studio`/`carts`/
   `checkouts` only from the day Clarity collection started, so early days may be zero there.
@@ -115,6 +136,6 @@ This file is the hand-off list between them. Each item names its owner. Update i
 
 ## How each side tests against the other
 
-- Backend: `tests/test_ui_bridge.py` on the PC (43 live checks) proves every frame above against the running server.
+- Backend: `tests/test_ui_bridge.py` on the PC (54 live checks) proves every frame above against the running server.
 - UI: serve this repo on `localhost:8840` and open `?server=ws://localhost:8765&token=<owner token>` on the PC, or
   use the live Funnel address from anywhere with the login screen.
