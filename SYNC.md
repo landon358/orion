@@ -43,7 +43,11 @@ This file is the hand-off list between them. Each item names its owner. Update i
 - New tool families the activity log will show (band in brackets): lists and reminders [planner], unit/currency/date
   utilities [planner/web/files], `python_run` and `show_data` [files], `research` and `history_on` [web/memory],
   `news_headlines`, `stock_quote`, `sports_scores` [web] (added 2026-11-17 evening, free public feeds, guests too),
-  `person_note`, `person_card`, `people_list` [memory] (people cards, same evening).
+  `person_note`, `person_card`, `people_list` [memory] (people cards, same evening), `workflow_run` / `workflow_define` /
+  `workflow_list` / `workflow_status` / `workflow_resume` [planner] (multi-step plans run by code, owner only).
+- Workflow progress uses the existing `task` frame: ids `wf_<run>`, `source: "Workflows"`, `status: running | done | rejected`,
+  `progress` 0..1, plus a `detail` field with the current step's sentence. `state` goes `working` with label "Workflow" and the
+  step sentence as detail while a step runs. No new frame type.
 - Phone push is done on the backend (2026-11-17 evening, `orion/push.py`): the owner's `notify`-class events
   (reminders, heartbeat, routine results, brief) and approvals are sent to a phone through ntfy or Twilio SMS when no
   owner device has sent a frame in the last two minutes. No UI change and no new frame. The UI's Web Push idea is
@@ -56,46 +60,13 @@ This file is the hand-off list between them. Each item names its owner. Update i
 - Files Orion made: HTTP `GET /files` and `GET /files/download?path=` exist (owner token). A socket frame listing new
   files (`files {items}`) could be added if the UI wants a panel.
 
-- **Requested by the UI (2026-11-17), shapes in ORION-PROTOCOL.md "Proposed":** (1) `every`/`next`/`due` on
-  routine, timer and reminder tasks, so the new Tasks page's Daily and Scheduled tabs fill in; (2) the
-  "Describe your task" `send` with a `task {kind, date?}` hint: always -> watch item, daily -> routine,
-  scheduled -> dated reminder any distance ahead; (3) `files_list` / `file_get` -> `files` / `file` for the
-  owner's Files panel; (4) `style_list` / `style_add` / `style_remove` -> `style` for the "Your rules" screen;
-  (5) `images` on `send` for pictures in chat; (6) optional `sources` on the final message; (7) document the
-  `telemetry` fields in the admin snapshot.
-
-- **Email alerts (requested 2026-11-17).** UI is built (pop-up + top-bar button); frames in ORION-PROTOCOL.md
-  "Proposed" 5b. Landon chose email over SMS for everyone. The natural home is a new email channel in
-  `orion/push.py` (same quiet hours, dedupe and "skip while a device is active" logic), but for **every account**,
-  each to their own verified address; push.py's ntfy/SMS stay owner-only. Backend to build:
-  1. **Sending address:** a dedicated Gmail account for ORION (not the owner's own Gmail, which stays the
-     read-and-draft connector). Display name "ORION". Turn on 2-step verification, make an app password, store it in
-     Credential Manager (`Orion-assistant / email:smtp_password`, address in `config.json`), send over
-     `smtp.gmail.com:587` STARTTLS. Gmail allows about 500 messages a day; the expected volume is about 50 a week.
-     (Alternative later: a custom-domain address through Resend's free tier, 100/day, with SPF/DKIM.)
-  2. **Storage:** each account's address, verified flag and on/off in `data/users.json` (PC only, never in this
-     repo). Codes hashed, 15-minute expiry, the rate limits in 5b.
-  3. **What gets emailed:** that account's own `notify` events: watch-list hits, finished timers, due reminders,
-     the owner's "needs your OK" approvals (summary only, never the full preview of a draft), and opt-in reports
-     (Kyle's morning report, if the owner approves the cost; see GUEST-PROFILES.md).
-     Not emailed: chat replies, routine noise, anything for another account.
-  4. **Limits:** at most 3 emails per account per day and 10 a day overall by default (configurable), quiet hours
-     22:00 to 07:00 local (hold and send at 07:00), and bundle anything that arrives within 10 minutes into one
-     email. Skip the email if that account has a device connected and active in the last 2 minutes.
-  5. **The email itself:** plain text plus simple HTML, subject under 60 characters ("ORION: Order #1043 hasn't
-     shipped"), two or three lines, a link to open ORION (the site URL), and a one-click unsubscribe link
-     (`List-Unsubscribe` header + a footer link to an HTTP endpoint on the Funnel that sets `on: false`).
-     Run it through the privacy redaction first. Never include tokens, passwords or login links.
-  6. **Replies:** emails to ORION's address are not read as commands (anyone can forge a sender). Optionally
-     forward them to the owner.
-  7. **Tests:** code expiry and lockout, guest isolation (one account never triggers another's email), quiet hours,
-     caps, unsubscribe link.
-
 ## Open: UI (this repo's session owns these)
 
-- Done 2026-11-17: `js/tools.js` lists 11 bands; `files` skills are Read / Create; Shopify is marked read-only.
-- Done 2026-11-17: the Files panel and "Your rules" are built in ORION's panel, waiting on the proposed frames
-  above (the HTTP `/files` endpoints need the owner token, which a name + password login doesn't have).
+- `js/tools.js` header comment still says 10 bands and lists `shopify` under "older ids": the backend sends 11 bands
+  for the owner (`memory, planner, web, files, voice, email, shopify, meta, clarity, github, printer`) and `shopify`
+  is live (read-only CIEL store once connected). Cosmetic.
+- `files` band: the backend now reads documents, spreadsheets, PDFs and images and creates text files and
+  spreadsheets. Its skills line (`Downloads`, `Briefs`) could say `Read`, `Create` and the group "ORION machine" fits.
 - The Business page can keep its sample note until `metrics` arrives; nothing to change. When Shopify lands, the
   backend's `days` will start with Shopify history (orders/revenue for 60 days) but `sessions`/`studio`/`carts`/
   `checkouts` only from the day Clarity collection started, so early days may be zero there.
