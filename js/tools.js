@@ -10,7 +10,7 @@
  */
 export const BANDS = {
   memory:  { name: 'Memory',     group: 'Core',          desc: 'What ORION remembers about you and past work', skills: ['Notes', 'Facts'] },
-  planner: { name: 'Planner',    group: 'Core',          desc: 'Lists, reminders and timers',                  skills: ['Lists', 'Reminders'] },
+  planner: { name: 'Planner',    group: 'Core',          desc: 'Scheduled tasks ORION runs himself, reminders, timers and lists', skills: ['Scheduled', 'Reminders'] },
   web:     { name: 'Web',        group: 'Research',      desc: 'Searches, reads pages and cites its sources',   skills: ['Search', 'Research'] },
   files:   { name: 'Files',      group: 'ORION machine', desc: 'Reads documents, sheets, PDFs and pictures; makes files', skills: ['Read', 'Create'] },
   voice:   { name: 'Voice',      group: 'Voice',         desc: 'Whisper hears you, Kokoro speaks',             skills: ['Whisper', 'Kokoro'] },
