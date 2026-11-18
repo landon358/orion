@@ -126,6 +126,11 @@ This file is the hand-off list between them. Each item names its owner. Update i
   (saved names); `style` items carry `n` and a change reply carries `result`; `email_alerts` has `pending: true` while a
   code is out; the final `message` has `sources` only when pages were read; `admin_snapshot.telemetry_7d` and
   `admin_snapshot.email_alerts` exist. Shapes in ORION-PROTOCOL.md "Backend notes".
+- **Audit (2026-11-18): `AUDIT-2026-11-18.md`** in this repo compares the backend with the UI at v51. UI items, in
+  order: show `snapshot.opening`; a device token instead of the password kept in localStorage (needs a backend
+  frame too; proposal welcome); a Background list for Jobs/Workflows tasks and banner targets; the email `pending`
+  state after a reload; patch vitals instead of re-rendering the detail panel; the Daily tab's UTC sort; stale copy
+  ("needs an update on ORION's side"); the mock client split out of the live bundle.
 - New on the backend (night of 2026-11-18): background jobs. "In the background, research X" / "when you have a moment"
   / "no rush" is answered at once ("Queued as job 1: ...") and the work arrives later as a `task` `job_<id>` with
   `source: "Jobs"` (queued -> running -> done / rejected, `detail` = result), an activity line and a `notify` "Job done".
