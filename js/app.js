@@ -642,9 +642,70 @@ $('#detail-body').addEventListener('submit', (e) => {
   haptic(6);
 });
 client.on('style', () => { ui.ruleGoing.clear(); if (ui.selected === 'leo') scheduleDetail(); });
-client.on('files', () => { if (ui.selected === 'leo') scheduleDetail(); });
+client.on('files', (d) => { if (ui.selected === 'leo') scheduleDetail(); noteNewFiles(d?.items); });
+
+/* New files: the server re-sends the whole list after a turn that wrote one. The first list is what
+   was already there; anything after that which wasn't is new. It gets a download card under the reply
+   that made it, and a place in the small "Files" card on wide screens. */
+const fileKey = (f) => `${f.path}|${f.modified ?? ''}`;
+ui.knownFiles = client.files?.items ? new Set(client.files.items.map(fileKey)) : null;
+ui.madeFiles = [];
+const FILE_IC = {
+  sheet: '<path d="M6.5 3.5h7.5l4 4v13h-11.5z"/><path d="M14 3.5v4h4M9.5 12h5M9.5 15.5h5M12 12v6.5"/>',
+  image: '<rect x="4" y="5" width="16" height="14" rx="2.5"/><circle cx="9.5" cy="10" r="1.6"/><path d="m5 17 4.5-4 3.5 3 2.5-2 3.5 3"/>',
+  pdf: '<path d="M6.5 3.5h7.5l4 4v13h-11.5z"/><path d="M14 3.5v4h4M9.5 13h5M9.5 16h3.5"/>',
+  doc: '<path d="M6.5 3.5h7.5l4 4v13h-11.5z"/><path d="M14 3.5v4h4M9.5 12h5M9.5 15h5M9.5 18h3"/>',
+  text: '<path d="M6.5 3.5h7.5l4 4v13h-11.5z"/><path d="M14 3.5v4h4M9.5 12h5M9.5 15h5"/>',
+};
+const DL_IC = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5v10M7.5 10.5 12 15l4.5-4.5M5.5 19.5h13"/></svg>';
+const fileRow = (f, cls) => {
+  const name = f.name || f.path.split('/').pop();
+  return `<div class="${cls}"><span class="fc-ic" aria-hidden="true"><svg viewBox="0 0 24 24">${FILE_IC[f.kind] ?? FILE_IC.text}</svg></span>`
+    + `<span class="fc-t"><b>${esc(name)}</b><small>${esc(FILE_KIND[f.kind] ?? 'File')}${f.size != null ? ` · ${KIB(f.size)}` : ''}</small></span>`
+    + `<button type="button" class="fc-dl${ui.fileWant.has(f.path) ? ' busy' : ''}" data-file-get="${esc(f.path)}" aria-label="Download ${esc(name)}">${DL_IC}</button></div>`;
+};
+function noteNewFiles(items) {
+  if (!items) return;
+  if (!ui.knownFiles) { ui.knownFiles = new Set(items.map(fileKey)); return; }
+  const fresh = items.filter((f) => !ui.knownFiles.has(fileKey(f)));
+  if (!fresh.length) return;
+  fresh.forEach((f) => ui.knownFiles.add(fileKey(f)));
+  const host = ui.lastLeo;
+  if (host) {
+    let row = host.querySelector('.file-cards');
+    if (!row) { row = document.createElement('div'); row.className = 'file-cards'; host.querySelector('.body').after(row); }
+    row.insertAdjacentHTML('beforeend', fresh.map((f) => fileRow(f, 'fcard')).join(''));
+    scrollToEnd();
+  }
+  ui.madeFiles = [...fresh, ...ui.madeFiles.filter((m) => !fresh.some((f) => f.path === m.path))];
+  renderMadeFiles();
+}
+function renderMadeFiles() {
+  const el = document.getElementById('made-files');
+  const list = ui.madeFiles;
+  el.hidden = !list.length;
+  if (!list.length) return;
+  el.innerHTML = `<div class="mf-head"><span>Files</span><small>${list.length}</small></div>`
+    + `<div class="mf-list">${list.slice(0, 5).map((f) => fileRow(f, 'mf-row')).join('')}</div>`
+    + (list.length > 5 ? '<button type="button" class="mf-all" data-files-open>All files</button>' : '');
+  if (!el.classList.contains('in')) requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('in')));
+}
+const markBusy = (path, on) => document.querySelectorAll('.fcard [data-file-get], .mf-row [data-file-get]')
+  .forEach((x) => { if (x.dataset.fileGet === path) x.classList.toggle('busy', on); });
+// downloads from the cards in the conversation and the small list
+document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-files-open]')) { ui.filesAll = true; select('leo'); return; }
+  const b = e.target.closest('.fcard [data-file-get], .mf-row [data-file-get]');
+  if (!b || b.classList.contains('busy')) return;
+  const path = b.dataset.fileGet;
+  ui.fileWant.add(path);
+  markBusy(path, true);
+  client.fileGet(path);
+  haptic(6);
+});
 client.on('file', (f) => {
   if (!ui.fileWant.delete(f.path)) return;
+  markBusy(f.path, false);
   if (ui.selected === 'leo') scheduleDetail();
   if (f.error || !f.data) { showBanner({ id: `dl${Date.now()}`, title: 'Couldn’t download that', body: f.error ?? 'ORION sent nothing back.', target: {} }); return; }
   const bin = atob(f.data), bytes = new Uint8Array(bin.length);
@@ -889,10 +950,8 @@ ui.routes = new Map(); ui.nextRoute = null;
 function tagRoute(el, tier) {
   const r = el.querySelector('.route');
   if (!r || !tier) return;
-  r.hidden = false;
-  r.dataset.tier = tier;
-  r.textContent = TIERS[tier] ?? tier;
-  r.title = tier === 'local' ? 'Answered by the local model on the PC' : `Answered by Claude ${TIERS[tier] ?? tier}`;
+  // replies carry no model tag; the sphere's deeper tint already shows a Claude turn
+  r.hidden = true;
 }
 client.on('route', ({ tier, id }) => {
   if (!tier) return;
@@ -1683,17 +1742,13 @@ const KIND_IC = {
 };
 const KINDS = {
   always: { title: () => 'Watch for something', sub: 'ORION keeps checking and tells you the moment it happens.',
-    ideas: ['Tell me if a Ciel order hasn’t shipped in 3 days', 'Alert me if ad spend passes $50 in a day', 'Let me know when a new review comes in'],
     note: () => '[New task · Always: keep checking this and tell me when it happens]' },
   daily: { title: () => 'Do it every day', sub: 'ORION does it once a day, at the time you say.',
-    ideas: ['Every morning at 7, sum up last night’s orders', 'Each morning, check yesterday’s ad results', 'At 9 pm, list what’s still open for tomorrow'],
     note: () => '[New task · Daily: do this every day]' },
   scheduled: { title: (day) => `Plan for ${longDay(day)}`, sub: 'ORION files it on that day and reminds you.',
-    ideas: ['Remind me to order winter samples', 'Check the holiday code is live', 'Follow up on the reprint'],
     note: (day) => `[New task · Scheduled for ${new Date(day).toLocaleDateString('en-US', { weekday: 'long' })} ${isoDay(day)}]` },
 };
 const ask = $('#tk-ask'), askIn = $('#tk-ask-in'), askGo = $('#tk-go');
-const fineHint = matchMedia('(hover: hover) and (pointer: fine)').matches ? 'Enter to send · Shift+Enter for a new line' : '';
 const askReady = () => askGo.setAttribute('aria-disabled', String(!askIn.value.trim()));
 function openAsk(tab) {
   const a = KINDS[tab];
@@ -1702,11 +1757,9 @@ function openAsk(tab) {
   $('#tk-ask-ic').innerHTML = KIND_IC[tab];
   $('#tk-ask-h').textContent = a.title(ui.askDay);
   $('#tk-ask-sub').textContent = a.sub;
-  $('#tk-ideas').innerHTML = a.ideas.map((t) => `<button type="button" class="tk-idea">${esc(t)}</button>`).join('');
-  $('#tk-ideas').scrollLeft = 0;
   askIn.value = '';
   askReady();
-  $('#tk-ask-hint').textContent = fineHint;
+  $('#tk-ask-hint').textContent = '';
   ask.classList.remove('sent');
   ask.hidden = false;
   requestAnimationFrame(() => { ask.classList.add('on'); askIn.focus(); });
@@ -1728,14 +1781,6 @@ function sendAsk() {
   setTimeout(closeAsk, 700);
 }
 askIn.addEventListener('input', askReady);
-$('#tk-ideas').addEventListener('click', (e) => {
-  const b = e.target.closest('.tk-idea'); if (!b) return;
-  askIn.value = b.textContent;
-  askReady();
-  askIn.focus();
-  askIn.setSelectionRange(askIn.value.length, askIn.value.length);
-  haptic(4);
-});
 $('#tk-ask-form').addEventListener('submit', (e) => { e.preventDefault(); sendAsk(); });
 askIn.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendAsk(); }

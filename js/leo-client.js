@@ -173,6 +173,7 @@ export class MockLeoClient extends Emitter {
     await sleep(500);
     this.#seed();
     this.emit('connection', { status: 'online', mode: this.mode });
+    this.emit('files', this.files);      // like the real server, which sends its file list on connect
     this.#setState('idle', 'Standing by');
     this.#vitalsTimer = setInterval(() => this.#tickVitals(), 1000);
     this.#scheduleBackground(9000);
@@ -564,6 +565,7 @@ export class MockLeoClient extends Emitter {
 
   #route(text) {
     const t = text.toLowerCase();
+    if (/(csv|spreadsheet|export|make (me )?a file)/.test(t)) return 'file';
     if (/(ad|ads|ciel|sale|sales|order|cpa|shop|revenue)/.test(t)) return 'ciel';
     if (/(research|search|look up|find out|news|trend)/.test(t)) return 'research';
     if (/(plan|task|todo|to-do|remind|schedule|steps)/.test(t)) return 'plan';
@@ -582,8 +584,12 @@ export class MockLeoClient extends Emitter {
       this.#setState('thinking', 'Thinking');
       await sleep(rand(700, 1100));
 
-      let reply;
-      if (route === 'ciel') {
+      let reply, made = null;
+      if (route === 'file') {
+        await this.#useTool('files', 'Wrote people.csv', 'files/people.csv', 1400);
+        made = { path: 'people.csv', name: 'people.csv', size: 61, modified: Date.now(), kind: 'sheet' };
+        reply = 'Done. I made people.csv with three rows: Sasha 2, Hunter 58, Landon 87. You can download it below.';
+      } else if (route === 'ciel') {
         this.#setState('working', 'Checking Ciel', 'Shopify + Meta Ads');
         await this.#useTool('clarity', 'Pulled Clarity sessions', 'last 7 days', 1600);
         await this.#useTool('meta', 'Pulled Meta Ads insights', 'last 7 days', 1600);
@@ -619,6 +625,8 @@ export class MockLeoClient extends Emitter {
 
       this.#setState('speaking', voice ? 'Speaking' : 'Replying');
       await this.#streamReply(reply, { voice });
+      // like the real server: the file list goes out again, unasked, after a turn that made a file
+      if (made) { this.files = { items: [made, ...this.files.items.filter((f) => f.path !== made.path)] }; this.emit('files', this.files); }
     } finally {
       this.#busy = false;
       this.#setState('idle', 'Standing by');

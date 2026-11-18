@@ -167,6 +167,9 @@ export class Orbit {
     this.last = now;
     if (this.dead) return;
     requestAnimationFrame((n) => this.#frame(n));
+    // the box can change size without ResizeObserver reporting it (the phone orb settling into a new
+    // box, a backgrounded tab): check it every frame, it's two reads
+    if (this.host.clientWidth !== this.W || this.host.clientHeight !== this.H) this.#resize();
     if (this.paused || !this.W) return;
     this.t += dt;
     const look = LOOK[this.state] ?? LOOK.idle;
@@ -208,7 +211,8 @@ export class Orbit {
     if (!W || !H) return;
     this.W = W; this.H = H; this.dpr = dpr;
     this.cv.width = Math.round(W * dpr); this.cv.height = Math.round(H * dpr);
-    this.cv.style.width = `${W}px`; this.cv.style.height = `${H}px`;
+    // the canvas always fills its box, so even a frame drawn at an old size stays centred in it
+    this.cv.style.width = '100%'; this.cv.style.height = '100%';
     // fewer rings, fewer segments when the sphere is small
     const m = Math.min(W, H);
     this.rings = this.weave ? 17 : m < 90 ? 10 : m < 200 ? 13 : 19;

@@ -1814,76 +1814,127 @@ body.chat .feed-inner { max-width: 720px; gap: 34px; }
   .drawer, .drawer.open, .tk-ask-card { transform: none !important; }
 }
 
-/* the task sheet: icon header, one field with send inside, tap-to-fill ideas */
+/* the task sheet: icon header, one field with send inside; neutral glass, no tint */
 #tk-ask .tk-sheet {
-  padding: 20px 20px 16px;
-  background: linear-gradient(180deg, #211d18, #161411 70%);
+  padding: 22px 22px 22px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02)), #141414;
+  border-color: rgba(255, 255, 255, 0.1);
 }
 .tk-grab { display: none; }
-.tk-sheet-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 18px; }
+.tk-sheet-head { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
 .tk-sheet-ic {
   flex: none; width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center;
-  color: var(--gold-l);
-  background: radial-gradient(120% 120% at 30% 15%, rgba(240, 195, 109, 0.24), rgba(240, 195, 109, 0.05));
-  border: 1px solid rgba(240, 195, 109, 0.22); box-shadow: var(--hi);
+  color: var(--text); background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: var(--hi);
 }
 .tk-sheet-ic svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-.tk-sheet-tt { flex: 1; min-width: 0; padding-top: 1px; }
-#tk-ask .tk-sheet h2 { font-size: 1.1875rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.25; margin: 0 0 4px; }
+.tk-sheet-tt { flex: 1; min-width: 0; }
+#tk-ask .tk-sheet h2 { font-size: 1.1875rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.25; margin: 0 0 3px; }
 .tk-sheet-tt p { margin: 0; font-size: 0.875rem; line-height: 1.4; color: var(--text-2); }
 .tk-sheet-x {
-  flex: none; width: 36px; height: 36px; margin: -2px -4px 0 0; border-radius: 50%;
-  display: grid; place-items: center; color: var(--text-2); background: var(--fill); border: 1px solid var(--edge);
+  flex: none; align-self: flex-start; width: 36px; height: 36px; margin: -2px -4px 0 0; border-radius: 50%;
+  display: grid; place-items: center; color: var(--text-2); background: rgba(255, 255, 255, 0.05); border: 1px solid var(--edge);
   transition: transform 0.16s var(--ease-out), color 0.2s;
 }
 .tk-sheet-x svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 .tk-field {
-  position: relative; border-radius: 20px; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--edge);
+  position: relative; border-radius: 20px; background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.09);
   transition: border-color 0.2s, box-shadow 0.2s;
 }
-.tk-field:focus-within { border-color: rgba(246, 223, 174, 0.34); box-shadow: 0 0 0 4px rgba(246, 223, 174, 0.05); }
+.tk-field:focus-within { border-color: rgba(255, 255, 255, 0.22); box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.04); }
 #tk-ask .tk-field textarea,
 #tk-ask .tk-field textarea:focus {
-  display: block; min-height: 108px; padding: 14px 62px 14px 16px;
+  display: block; min-height: 112px; padding: 14px 62px 14px 16px;
   background: transparent; border: 0; border-radius: 20px; box-shadow: none;
 }
 .tk-go {
   position: absolute; right: 10px; bottom: 10px; width: 42px; height: 42px; border-radius: 50%;
   display: grid; place-items: center; color: var(--ink); background: var(--paper);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
-  transition: transform 0.16s var(--ease-out), opacity 0.2s, background-color 0.2s;
+  transition: transform 0.16s var(--ease-out), opacity 0.2s;
 }
-.tk-go[aria-disabled="true"] { opacity: 0.32; box-shadow: none; }
+.tk-go[aria-disabled="true"] { opacity: 0.28; box-shadow: none; }
 .tk-go svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 .tk-go .ok, .tk-ask.sent .tk-go .up { display: none; }
 .tk-ask.sent .tk-go .ok { display: block; }
-.tk-ask.sent .tk-go { background: var(--gold-l); opacity: 1; }
+.tk-ask.sent .tk-go { opacity: 1; }
 .tk-go:active, .tk-sheet-x:active { transform: scale(0.94); transition-duration: 0.1s; }
-.tk-ideas { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-.tk-idea {
-  height: 36px; padding: 0 14px; border-radius: 999px; white-space: nowrap;
-  font: 400 0.8125rem/1 var(--font); color: var(--text-2);
-  background: var(--fill); border: 1px solid var(--edge);
-  transition: transform 0.16s var(--ease-out), color 0.2s, border-color 0.2s;
-}
-.tk-idea:active { transform: scale(0.97); transition-duration: 0.1s; }
-#tk-ask .tk-ask-hint { min-height: 1em; margin: 12px 2px 0; font-size: 0.75rem; }
-#tk-ask .tk-ask-hint:empty { display: none; }
+#tk-ask .tk-ask-hint[hidden], #tk-ask .tk-ask-hint { display: none; }
 @media (hover: hover) and (pointer: fine) {
-  .tk-idea:hover { color: var(--text); border-color: var(--edge-2); }
   .tk-sheet-x:hover { color: var(--text); }
 }
 @media (max-width: 640px) {
   #tk-ask { grid-template-columns: minmax(0, 1fr); }
-  #tk-ask .tk-sheet { min-width: 0; padding: 10px 20px calc(16px + var(--sab)); border-width: 1px 0 0; }
+  #tk-ask .tk-sheet { min-width: 0; padding: 10px 20px calc(18px + var(--sab)); border-width: 1px 0 0; }
   .tk-grab { display: block; width: 36px; height: 5px; margin: 0 auto 16px; border-radius: 3px; background: rgba(255, 255, 255, 0.18); }
-  /* one swipeable row of ideas instead of a tall stack */
-  .tk-ideas {
-    flex-wrap: nowrap; overflow-x: auto; margin: 14px -20px 0; padding: 0 20px;
-    scrollbar-width: none; -webkit-mask: linear-gradient(90deg, transparent, #000 20px, #000 calc(100% - 20px), transparent);
+}
+
+/* replies carry no model tag, and the "while you were gone" pill and panel are retired */
+.msg-head .route { display: none !important; }
+.sum-pill, .summary { display: none !important; }
+
+/* a file ORION made, under the reply that made it */
+.file-cards { display: grid; gap: 8px; margin-top: 12px; max-width: 420px; }
+.fcard, .mf-row {
+  display: flex; align-items: center; gap: 12px; min-width: 0;
+  padding: 10px 10px 10px 12px; border-radius: 16px;
+  background: rgba(255, 255, 255, 0.045); border: 1px solid rgba(255, 255, 255, 0.09); box-shadow: var(--hi);
+}
+.fcard { animation: rise 0.24s var(--ease-out) both; }
+.fc-ic {
+  flex: none; width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center;
+  color: var(--text-2); background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.fc-ic svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.fc-t { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.fc-t b { font-size: 0.875rem; font-weight: 500; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-t small { font-size: 0.75rem; color: var(--text-3); }
+.fc-dl {
+  flex: none; position: relative; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+  color: var(--ink); background: var(--paper);
+  transition: transform 0.16s var(--ease-out), opacity 0.2s;
+}
+.fc-dl svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.1; stroke-linecap: round; stroke-linejoin: round; transition: opacity 0.15s; }
+.fc-dl:active { transform: scale(0.94); transition-duration: 0.1s; }
+.fc-dl.busy svg { opacity: 0; }
+.fc-dl.busy::after {
+  content: ""; position: absolute; inset: 11px; border-radius: 50%;
+  border: 2px solid rgba(21, 19, 16, 0.25); border-top-color: var(--ink); animation: fc-spin 0.7s linear infinite;
+}
+@keyframes fc-spin { to { transform: rotate(360deg); } }
+
+/* wide screens: the files made this visit, in a small card beside the conversation */
+.made-files { display: none; }
+@media (min-width: 1240px) {
+  .made-files:not([hidden]) {
+    display: block; position: fixed; z-index: 12; top: calc(var(--top-h) + 14px); right: 20px;
+    width: min(280px, calc((100vw - 760px) / 2 - 40px)); padding: 12px;
+    border-radius: 20px; background: var(--glass-heavy); border: 1px solid var(--glass-edge); box-shadow: var(--hi), var(--shadow);
+    -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+    opacity: 0; transform: translateY(-8px) scale(0.98); transform-origin: top right;
+    transition: opacity 0.25s var(--ease-out), transform 0.3s var(--ease-out);
   }
-  .tk-ideas::-webkit-scrollbar { display: none; }
-  .tk-idea { flex: none; }
+  .made-files.in { opacity: 1; transform: none; }
+  body:not(.chat) .made-files, .detail-open .made-files { opacity: 0 !important; transform: translateY(-8px) scale(0.98) !important; pointer-events: none; }
+}
+.mf-head { display: flex; align-items: baseline; justify-content: space-between; padding: 2px 4px 10px; }
+.mf-head span { font-size: 0.875rem; font-weight: 600; }
+.mf-head small { font-size: 0.75rem; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.mf-list { display: grid; gap: 6px; }
+.mf-row { padding: 8px 8px 8px 10px; border-radius: 14px; gap: 10px; }
+.mf-row .fc-ic { width: 32px; height: 32px; border-radius: 9px; }
+.mf-row .fc-ic svg { width: 17px; height: 17px; }
+.mf-row .fc-dl { width: 34px; height: 34px; }
+.mf-row .fc-dl svg { width: 16px; height: 16px; }
+.mf-row .fc-dl.busy::after { inset: 9px; }
+.mf-all { width: 100%; height: 36px; margin-top: 8px; border-radius: 12px; font-size: 0.8125rem; color: var(--text-2); background: rgba(255, 255, 255, 0.04); border: 1px solid var(--edge); }
+@media (hover: hover) and (pointer: fine) {
+  .fc-dl:hover { opacity: 0.88; }
+  .mf-all:hover { color: var(--text); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fcard { animation: none; }
+  .made-files { transform: none !important; }
+  .fc-dl.busy::after { animation-duration: 1.6s; }
 }
 
 /* vitals inside ORION's retro panel */
