@@ -333,7 +333,11 @@ recurring reminder made in chat), `every` (human words: "day at 07:30", "mon/wed
 `status: queued` then `done`; timers `timer_<label>` with `source: "Timer"`, `status: running`, `due`. The backend
 re-sends the changed tasks after any turn that used set_timer / cancel_timer / remind_at / remind_on / routine_add /
 routine_remove, and when a timer finishes (`status: done`). A `task` for a running workflow has id `wf_<run>` and
-`source: "Workflows"` (see SYNC.md).
+`source: "Workflows"` (see SYNC.md). A background job (2026-11-18: the person said "in the background", "when you have
+a moment", "no rush" with a request) is a `task` with id `job_<id>`, `source: "Jobs"`, `title: "Job 3: <request>"`,
+`status` `queued` -> `running` (progress 0.5) -> `done` (progress 1) or `rejected` (failed, cancelled, lost), and on
+done/failed a `detail` with the result's first 200 characters, an `activity` line (`done` / `rejected`) and a `notify`
+("Job done" / "Job failed"). The request itself was answered at once with "Queued as job 3: ...".
 
 ### 2. "Describe your task": new tasks from the Tasks page
 
