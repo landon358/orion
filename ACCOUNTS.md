@@ -10,9 +10,11 @@ Unknown frame types are ignored on both sides, so building this incrementally is
 | | Owner (Landon) | Everyone else (a "guest" account) |
 |---|---|---|
 | Login | name + password, or the token link | name + password (or a token link the owner made) |
-| Orion | full: actions on the PC, connectors, approvals, memory editing, self-refinement, routines | chat only: talk, research, calculate, weather, timers, their own facts, their own watch list. Cannot touch the PC, connectors, settings, Orion's own files, or any other account's data |
-| Cloud budget | shared weekly budget | **10 cents** lifetime (`guests.budget_usd`), then the free local brain keeps answering |
-| Heartbeat | `brain/HEARTBEAT.md` + everything Orion knows (printer, email, Clarity, routines, inbox) | their own checklist, checked with only their own context (timers, their notifications, their last conversation); alerts go to them only |
+| Orion | full: actions on the PC, connectors, approvals, memory editing, self-refinement, routines | chat only: talk, research (web search and pages, Brave-backed), news, quotes and scores, calculate, weather, timers, reminders, **scheduled tasks Orion carries out for them** (2026-11-18), their own facts, their own watch list, their own profile page. Cannot touch the PC, connectors, settings, Orion's own files, or any other account's data |
+| Cloud budget | shared weekly budget | **10 cents** lifetime (`guests.budget_usd`), then the free local brain keeps answering (scheduled tasks included) |
+| Heartbeat | `brain/HEARTBEAT.md` + everything Orion knows (printer, email, Clarity, routines, inbox) + live checks | their own checklist, checked with their own context (timers, notifications, their scheduled tasks, their last conversation) plus **live checks** fetched for items about the weather, a stock, a team or the news (2026-11-18); alerts go to them only |
+| Tasks | routines, scheduled tasks, reminders, timers | their own scheduled tasks (`source: "Scheduled"`) and reminders, 10 at most, plus timers; results come back in chat, as a task and by email |
+| Profile | `#/profile`: title, email alerts, facts (removable), counts, sign out | the same page, with the owner's note about them under "What the owner told ORION about you" |
 | Brief | the morning brief (07:30 routine, Haiku, CIEL data) | a free local "while you were away" summary of their timers, watch list, alerts and last conversation |
 | Bands on the disc | all 10 | `memory, planner, web, voice` |
 | Sees other accounts | yes, through the admin view | never |
