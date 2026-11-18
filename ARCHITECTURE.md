@@ -52,6 +52,8 @@ orion_server.py  (FastAPI, 127.0.0.1:8766)         one Orion, one state
  ├─ orion/privacy.py      redaction of keys, tokens, card/account numbers before anything goes to Claude
  ├─ orion/metrics.py      the Business page `metrics` object from Shopify + Clarity (+ Meta); routine metrics_refresh, Bridge.set_metrics
  ├─ orion/push.py         phone push (ntfy or Twilio SMS), owner only: bus banners + approvals, skipped while an owner device is active
+ ├─ orion/mail_alerts.py  email alerts for every account from a dedicated ORION Gmail: verified addresses (6-digit codes), caps, quiet hours,
+ │                        bundling, unsubscribe links; state in data/users.json + data/email_alerts_state.json
  ├─ orion/users.py        accounts: owner + guests, tokens, passwords (PBKDF2), budgets, the own Local+ switch
  ├─ orion/safety.py       risk tiers READ/LOW/CONFIRM/CRITICAL, Guard, leases, approval rules, audit log
  ├─ orion/tools.py        core tools, which ones guests get, cue regexes that decide which tools the 9B is offered
@@ -204,6 +206,15 @@ on the device that sent them (`server.ui_shared_chat` flips that). Orion events 
 `approval` + `task` + `notify`). Bus events become `activity`/`notify`/`task`/`brief`. Owner devices can turn on
 `admin` and receive `admin_snapshot` plus a live `admin_event` mirror of every room. `vitals` once a second from
 nvidia-smi. `speaks: false` (the browser speaks; Kokoro over the socket is phase 2, not designed).
+
+Added 2026-11-18 for the UI's Tasks page, panel and email pop-up (shapes in the UI repo's ORION-PROTOCOL.md "Implemented
+on the backend"): `sync_tasks` (one task per routine with `every`/`next`, per dated reminder and timer with `due`, re-sent
+after task-changing tools and when a timer finishes); the `send.task` hint handled by `Orion._task_hint` (code, no model);
+`style_*` -> `style`; `files_list`/`file_get` -> `files`/`file` (workspace only, owner); `send.images` saved under
+`files/chat/` and looked at by the local vision model before the turn (`image_look`); `sources` on the final message;
+`email_*` -> `email_alerts` through `orion/mail_alerts.py`, with `/u/{account}/{token}` on the UI port as the one-click
+unsubscribe; `telemetry_7d` and `email_alerts` in the admin snapshot. Guests get `PROFILE.md` (from the UI repo's
+GUEST-PROFILES.md) injected into their own turns only (`Brain.profile_text`).
 
 ## Safety
 
