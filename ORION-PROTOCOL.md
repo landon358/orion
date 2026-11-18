@@ -488,6 +488,87 @@ also carried `sources: [{title, url}]`, the UI would use that instead of parsing
 - With no turns in the window the object is `{ "days": 1, "turns": 0 }`.
 - `admin_snapshot.email_alerts` is `{ configured, from, sent_today, queued, accounts, last_error }` for the email channel.
 
+## Implemented on the backend 2026-11-18 (evening): scheduled tasks, profile, results in chat
+
+Landon's request: tasks are how ORION acts on his own. Before this, "run a research report on NVIDIA at 12pm" became a
+reminder to the person; now it is work ORION does at that time, for the owner and for guests, and the result comes back
+to them. The UI in this repo was updated by the backend session the same evening (`js/profile.js`, Tasks page copy and
+rows, `js/leo-client.js`, `index.html`, `css/app.css`, `sw.js` v54), so both sides are in step.
+
+### 1. Scheduled tasks: ORION does the work at the time
+
+- **From the Tasks page** (the `send` + `task {kind, date?}` hint of section 2 above): `daily` and `scheduled` now create a
+  *scheduled task* (a routine with action `run`) unless the words ask for a reminder ("remind me", "tell me to", "don't
+  forget"). `always` is still a watch item. Guests get the same (before, a guest's daily became a watch item and their
+  scheduled a 60-day timer). The reply is code: "Scheduled: I will research X every day at 7:00 AM and report back, Commander."
+- **From chat**: a sentence that is clearly "do X at a time" ("every morning at 8, summarize the AI news", "research the
+  best budget printers tomorrow at 9", "every 2 hours check the NVIDIA stock price") is scheduled by code too (`route`
+  says `reason: "task hint"`); otherwise the models have the tools `schedule_task {text, when}`, `task_list`, `task_remove
+  {item}` (every account) and `remind_at` is described as "only for things the person does". "What's scheduled?" and
+  "Remove my scheduled task: <words>" are answered by code.
+- **When it is due** the request is queued as a background job for that account and runs as an ordinary turn with that
+  account's tools and budget (a guest's job uses guest tools and the guest's allowance; Local+ off keeps it on the free
+  local brain). The result reaches the account three ways: the task frame goes `done` with the result as `detail`; a
+  `message` frame of ORION's own appears in the conversation (below); a `notify` "Task done" (and an email alert, if the
+  account has one, titled "Scheduled task done").
+- **Task frames**: a one-off is `{id: "sched_<name>", source: "Scheduled", title: <the request>, due, status: queued ->
+  running -> done | rejected, detail?}`; a recurring one is `{id: "routine_<name>", source: "Scheduled", every: "day at 07:00"
+  | "mon/tue/wed/thu/fri at 18:00" | "every 2h", next, last?, status, detail?}`. Reminders keep `source: "Planner"` (dated)
+  and `"Reminder"` (recurring) and now exist for guests too. Each account's snapshot carries only its own tasks; the
+  owner's also has the config.json routines. Re-sent after `schedule_task` / `task_remove` turns and when a job changes state.
+- Limits: a guest may hold 10 scheduled tasks and reminders; the job queue allows 3 waiting per account.
+
+### 2. A result ORION brings on his own: `message` with `background`
+
+```json
+{ "type": "message", "data": { "id": "job_1a2b3c4d", "role": "leo", "text": "<the result>", "streaming": false,
+  "at": 1763300000000, "background": true, "title": "Scheduled task: research the best budget 3D printers" } }
+```
+
+Sent to every device of the account when a scheduled task or a background job ("in the background, ...") finishes with
+a result. `background: true` and `title` let the UI label it (this repo shows a small kicker above the message). The
+text is already in the account's conversation history on the backend (the job ran as a turn), so render it as a normal
+reply and do not re-send it. The `id` is the job's; a second frame with the same id never follows.
+
+### 3. Profile: what ORION has on this person, their title, sign out
+
+```json
+{ "type": "profile_get",    "data": {} }
+{ "type": "profile_update", "data": { "address": "Captain" } }          // "" = back to the default ("Commander")
+{ "type": "profile_forget", "data": { "text": "<the exact fact>" } }    // or { "n": 3 } from the list below
+
+{ "type": "profile", "data": {
+  "account": { ...the snapshot's account, with the new address... },
+  "name": "Kyle", "address": "Captain", "default_address": "Commander", "role": "guest",
+  "created": "2026-11-16T20:01:00", "last_seen": "2026-11-18T13:40:12",
+  "email_alerts": { "email": "kyle@example.com", "verified": true, "on": true },
+  "cloud": { "mode": "local+", "on": true, "reason": "...", "allowance_left_usd": 0.1, ... },
+  "facts": [ { "n": 1, "text": "The user likes oolong tea", "category": "general", "saved": "2026-11-18", "source": "chat" } ],
+  "facts_total": 7,
+  "counts": { "facts": 7, "watch": 1, "rules": 2, "tasks": 3, "journal_days": 4 },
+  "about": "<the owner's PROFILE.md note about this guest, or empty>",
+  "result": "Noted. I will call you Captain from now on.",      // only after a change
+  "at": 1763300000000 } }
+```
+
+- `profile_get` answers with the object; the client in this repo asks for it after every snapshot. Every change
+  (`profile_update`, `profile_forget`) answers with the full object to all devices of the account, plus `result`
+  (a sentence, or "Error: a title is 1 to 30 letters, digits, spaces, apostrophes or hyphens.").
+- `address` is validated (1 to 30 characters: letters, digits, spaces, `.`, `'`, `-`); it takes effect on the next reply
+  and in the live session. The owner's admin `account_update {address}` does the same and the guest's devices receive a
+  `profile`. The owner's `accounts` list is re-sent when a guest changes their own title.
+- `facts` are the newest 80 of this account's own memory (`facts.json`), newest first; `profile_forget` removes one by its
+  exact text (never a fuzzy match, unlike the chat tool `forget`).
+- **Sign out** is a UI matter: forget the saved login on the device and show the login screen (`client.signOut()` in
+  `js/leo-client.js`); the backend keeps no per-device state. Same over HTTP: `GET /profile`, `PUT /me {address}`.
+- `snapshot.account.features` gained `tasks: true` and `profile: true`.
+
+### 4. Watch list items that need the world
+
+The heartbeat now fetches live information for a watch item about the weather, a stock or crypto price, a team, or the
+news (free public feeds) and judges the item against it, for every account; before, "Check NVIDIA stock price daily" was
+compared with nothing and never fired. No frame change: alerts still arrive as `notify {title: "Heartbeat"}`.
+
 ## Proposed (not yet in the backend)
 
 Nothing at the moment. Add new frame shapes here for Landon to approve.
