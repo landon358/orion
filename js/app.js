@@ -303,7 +303,8 @@ client.on('notify', (n) => showBanner(n));
 /* graph: select a node to see it in the detail panel               */
 /* ================================================================ */
 
-orbit.onSelect = (id) => { select(id); haptic(6); };
+// on a phone the little sphere at the top of the conversation is the way back to the ORION page
+orbit.onSelect = (id) => { if (ui.route === 'chat' && !isWide()) { go('home'); haptic(5); return; } select(id); haptic(6); };
 
 function select(id, { open = true } = {}) {
   ui.selected = id;
@@ -1009,22 +1010,36 @@ function loginGate(panel, { orb } = {}) {
 client.on('connection', ({ reason }) => { if (reason === 'auth') playIntro({ brand: $('#brand'), gate: loginGate }); });
 
 const input = $('#input');
+// The box is a contenteditable div (see the CSS). These give it the few textarea bits the code uses.
+if (input.contentEditable !== 'plaintext-only') input.contentEditable = 'true';
+Object.defineProperty(input, 'value', {
+  get: () => input.innerText.replace(/\n$/, '').replace(/\u00a0/g, ' '),
+  set: (v) => { input.textContent = v; },
+});
+Object.defineProperty(input, 'placeholder', { set: (v) => { input.dataset.placeholder = v; } });
+input.setSelectionRange = () => {
+  const sel = getSelection(), rg = document.createRange();
+  rg.selectNodeContents(input); rg.collapse(false);
+  sel.removeAllRanges(); sel.addRange(rg);
+};
 const setPlaceholder = () => { input.placeholder = 'Ask ORION'; };
 setPlaceholder();
 wideMQ.addEventListener('change', setPlaceholder);
 const form = $('#compose-form');
 function autosize() {
-  input.style.height = 'auto';
-  input.style.height = `${Math.min(input.scrollHeight, 132)}px`;
+  input.classList.toggle('empty', !input.value);
+  if (!input.value && input.firstChild) input.textContent = '';   // drop a stray <br> so the placeholder shows
   $('#btn-send').setAttribute('aria-disabled', String(!input.value.trim() && !ui.pics?.length));
 }
 input.addEventListener('input', autosize);
+// a tap anywhere in the box's area (not just on the text line) puts the cursor in it
+$('#compose-form').addEventListener('click', (e) => { if (e.target !== input && !input.contains(e.target)) { input.focus(); input.setSelectionRange(); } });
 input.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submitCompose(); }
 });
 // on a phone the box drops to one line while the keyboard is up, so the conversation keeps the room
-input.addEventListener('focus', () => { $('#composer').classList.add('focus'); if (!isWide()) { body.classList.add('typing'); input.rows = 1; autosize(); } });
-input.addEventListener('blur', () => { $('#composer').classList.remove('focus'); body.classList.remove('typing'); if (input.rows !== 2) { input.rows = 2; autosize(); } });
+input.addEventListener('focus', () => { $('#composer').classList.add('focus'); if (!isWide()) body.classList.add('typing'); });
+input.addEventListener('blur', () => { $('#composer').classList.remove('focus'); body.classList.remove('typing'); });
 // The send button is a plain button, not a form submit: a <form> round the box makes iOS show its
 // passwords / cards / location bar over the keyboard. Pressing a dock button doesn't take focus
 // from the box either, so the keyboard stays put and nothing moves under the finger mid-tap.
@@ -1106,7 +1121,10 @@ $('#pics').addEventListener('click', (e) => {
 $('#pic-in').addEventListener('change', (e) => { addPics(e.target.files); e.target.value = ''; });
 input.addEventListener('paste', (e) => {
   const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
-  if (files.length) { e.preventDefault(); addPics(files); }
+  if (files.length) { e.preventDefault(); addPics(files); return; }
+  // plain text only, whatever was copied
+  const t = e.clipboardData?.getData('text/plain');
+  if (t != null && input.contentEditable === 'true') { e.preventDefault(); document.execCommand('insertText', false, t); }
 });
 $('#composer').addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.items ?? [])].some((i) => i.type.startsWith('image/'))) { e.preventDefault(); $('#composer').classList.add('drop'); } });
 $('#composer').addEventListener('dragleave', () => $('#composer').classList.remove('drop'));

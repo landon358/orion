@@ -655,13 +655,16 @@ body.dash .dock { opacity: 0; pointer-events: none; transform: translateX(-50%) 
 
 .ask { display: block; padding: 0 8px 0 8px; }
 .ask-field { display: flex; }
-.ask textarea {
-  flex: 1; resize: none; border: 0; outline: 0; background: transparent;
+/* the box is a contenteditable, not a textarea: iOS Safari puts its passwords / cards / location
+   bar over the keyboard for any textarea or input, but not for this */
+.ask-box {
+  position: relative; flex: 1; min-width: 0; border: 0; outline: 0; background: transparent;
   font: 400 0.9688rem/1.45 var(--font); color: var(--text);
-  padding: 2px 0 6px; min-height: 48px; max-height: 150px;
+  padding: 2px 0 6px; min-height: 48px; max-height: 132px; overflow-y: auto;
+  white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; -webkit-user-select: text; user-select: text;
 }
-.ask textarea::placeholder { color: #8a8479; }
-.ask textarea:focus-visible { outline: none; }
+.ask-box.empty::before { content: attr(data-placeholder); position: absolute; left: 0; top: 2px; color: #8a8479; pointer-events: none; }
+.ask-box:focus-visible { outline: none; }
 
 .dock-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
 .dock-row .spacer { flex: 1; }
@@ -1297,7 +1300,7 @@ body.business #biz, body.admin #adm { opacity: 1; visibility: visible; transform
   }
   .summary::before { display: none; }
   .biz { inset: var(--top-h) 0 0 0; padding: 4px 14px calc(32px + var(--sab)); }
-  .ask textarea { min-height: 40px; }
+  .ask-box { min-height: 40px; }
 
   .detail {
     z-index: 42;
@@ -1924,7 +1927,7 @@ body.chat .feed-inner { max-width: 720px; gap: 34px; }
     padding: 10px 15px; border-radius: 16px 16px 4px 16px; text-align: left;
     background: rgba(239, 226, 196, 0.07); border: 1px solid rgba(239, 226, 196, 0.16);
     font: 400 0.9375rem/1.55 var(--font); color: var(--text);
-    -webkit-line-clamp: 5; display: -webkit-box; -webkit-box-orient: vertical;
+    -webkit-line-clamp: 5; display: -webkit-box; -webkit-box-orient: vertical; white-space: pre-line;
   }
   .home-q[hidden], body:not(.home) .home-q { display: none; }
 
@@ -1950,7 +1953,7 @@ body.chat .feed-inner { max-width: 720px; gap: 34px; }
   .convo .msg-head .meta svg { display: none; }
   .convo .msg .body { font-size: 1rem; line-height: 1.62; }
   .convo .working { padding: 2px 0; }
-  body.typing .ask textarea { min-height: 26px; }
+  body.typing .ask-box { min-height: 24px; }
   body.typing .composer { padding-top: 10px; }
 
   /* the menu: an opaque full screen (no blur over a moving sphere) */
@@ -1988,3 +1991,7 @@ body.chat .feed-inner { max-width: 720px; gap: 34px; }
 @media (min-width: 900px) { .dt-phone, .drawer-sec { display: none; } }
 @media (min-width: 900px) { .home-q { display: none; } }
 body:not(.settled) .orbit { transition: none !important; }
+/* no back link on the conversation page: the menu and the top-bar logo lead back to ORION */
+.convo-head .chat-back { display: none; }
+@media (max-width: 899px) { body.chat .convo-head { display: none; } }
+.convo .msg.user { white-space: pre-line; }

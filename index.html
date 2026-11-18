@@ -137,10 +137,9 @@
       <div class="pics" id="pics" hidden></div>
       <input type="file" id="pic-in" accept="image/*" multiple hidden>
       <div class="ask" id="compose-form">
-        <label class="ask-field">
-          <span class="sr-only">Message ORION</span>
-          <textarea id="input" rows="2" placeholder="Ask ORION" enterkeyhint="send" inputmode="text" autocomplete="off" autocorrect="on" autocapitalize="sentences" spellcheck="true" data-form-type="other" data-lpignore="true" data-1p-ignore></textarea>
-        </label>
+        <div class="ask-field">
+          <div id="input" class="ask-box empty" contenteditable="plaintext-only" role="textbox" aria-multiline="true" aria-label="Message ORION" enterkeyhint="send" inputmode="text" autocapitalize="sentences" autocorrect="on" spellcheck="true" data-placeholder="Ask ORION"></div>
+        </div>
       </div>
 
       <div class="voice-bar" id="voice-bar" hidden>
