@@ -117,6 +117,24 @@ This file is the hand-off list between them. Each item names its owner. Update i
   7. **Tests:** code expiry and lockout, guest isolation (one account never triggers another's email), quiet hours,
      caps, unsubscribe link.
 
+## 2026-11-18 evening: scheduled tasks, profile page, results in chat (backend session, both sides)
+
+Landon asked for tasks to be the way ORION acts on his own, for guests to have the same, for guests to research (Brave)
+and get email updates about their tasks and reminders, and for a profile page (sign out, what ORION knows, change the
+title). Done on the backend and, to keep the two in step, **also in this repo by the backend session** (commits of
+2026-11-18 evening): `js/profile.js` (new page, route `#/profile`, rail and drawer links), `js/leo-client.js`
+(`profile` frames, `profileGet/Update/Forget`, `signOut()`, `account` event), `js/app.js` (Tasks page copy and rows for
+`source: "Scheduled"` with status and result, remove buttons on scheduled tasks and reminders, the `background` message
+kicker, the profile route), `index.html`, `css/app.css`, `sw.js` (v54), `js/tools.js` (planner description). Shapes in
+ORION-PROTOCOL.md "Implemented on the backend 2026-11-18 (evening)". UI session: please keep these when you next touch
+the Tasks page; the "Proposed" section is empty again.
+
+Backend facts the UI relies on: `_task_hint` makes `run` routines for daily/scheduled kinds (reminders only on reminder
+words); chat sentences that are clearly "do X at a time" are scheduled by code; tools `schedule_task`, `task_list`,
+`task_remove` exist for every account; a due task becomes a background job for that account and its result arrives as
+the task's `detail`, a `message {background: true, title}` and a `notify`; the heartbeat fetches live weather / quotes /
+scores / headlines for watch items that need them (guests included); `profile_*` frames and `GET /profile`, `PUT /me`.
+
 ## Open: UI (this repo's session owns these)
 
 - Done 2026-11-17: `js/tools.js` lists 11 bands; `files` skills are Read / Create; Shopify is marked read-only.
