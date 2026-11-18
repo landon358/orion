@@ -49,6 +49,8 @@ orion_server.py  (FastAPI, 127.0.0.1:8766)         one Orion, one state
  │                        message ride into the speaker and cloud context; owner's cards seeded from the guest accounts (14 friends)
  ├─ orion/jobs.py         job queue: "in the background, ..." hand-offs queued by code, run one at a time as ordinary turns when the GPU is
  │                        free, results as `job` bus events (UI task job_<id>, banner, push, email); data/jobs.json
+ ├─ orion/schedule.py     scheduled tasks (2026-11-18): parses "at 12pm" / "tomorrow at 9" / "every morning at 8" / "every 2 hours", reminder vs
+ │                        work Orion does; a `run` routine queues the request as a job for that account when due (any account)
  ├─ orion/ocr.py          RapidOCR (CPU, local) reads the exact text of pictures and screenshots; it goes to the vision model and into the result
  ├─ orion/embed.py        memory by meaning: nomic-embed-text index per account (facts, notes, journals, profile files); recall into every reply
  ├─ orion/research.py     search -> fetch -> chunk -> rank -> the few passages that answer, with sources; cached a day
@@ -143,8 +145,9 @@ the reason is reported. Surfaces: UI frames `cloud` / `cloud_master`, HTTP `/clo
 
 - **Owner**: everything. Token in Credential Manager (`Orion-assistant / server:api_token`), optional login
   password (`orion_connect.py password`), login name (`name owner "..."`).
-- **Guest** (a friend): `orion_connect.py guest add "Name" --password` or the UI's `account_add`. Chat, research,
-  calculate, weather, timers, own facts, own watch list, own brief, four bands, 10-cent allowance then local.
+- **Guest** (a friend): `orion_connect.py guest add "Name" --password` or the UI's `account_add`. Chat, research
+  (Brave-backed), news/quotes/scores, calculate, weather, timers, reminders, scheduled tasks Orion carries out for them
+  (2026-11-18), own facts, own watch list (with live checks), own brief, own profile page, four bands, 10-cent allowance then local.
   Enforced in three layers: tools outside `GUEST_TOOLS` are never offered, `Orion._exec_call` blocks them, HTTP
   returns 403. Guest tools only touch the guest's own data, so they run as READ risk. Guests never see owner data,
   SELF.md beyond its identity section, other accounts, or any way to change Orion.
@@ -155,10 +158,24 @@ the reason is reported. Surfaces: UI frames `cloud` / `cloud_master`, HTTP `/clo
 
 - **Routines** (`config.json` + `data/routines.json`): interval or clock triggers; built-ins email_triage,
   printer_watch, clarity_daily, morning_brief; generic checks hash a snapshot and only call a model on change.
-  Never create confirmations; anything learned goes to `brain/inbox.json` for the owner.
+  Never create confirmations; anything learned goes to `brain/inbox.json` for the owner. Every routine carries `user`
+  (default owner); `Routines.for_user` / `summary(user_id)` give an account its own.
+- **Scheduled tasks** (`orion/schedule.py`, action `run` in `actions.py`, added 2026-11-18 at the owner's request): a
+  routine with `action: "run"` and `text` is Orion doing the request itself when due: `Actions.run` queues the text as a
+  background job for the routine's account (`Jobs.submit(..., routine=name)`), which runs as an ordinary turn with that
+  account's tools and budget; the job's status and result show on the task (`Bridge.sync_tasks`, ids `sched_<name>` /
+  `routine_<name>`, source "Scheduled"), in the conversation (`message {background, title}`), as a banner and by email.
+  Owner and guests alike (guests: `run` and `reminder` actions only, 10 at most, removed with the account). Created by
+  `Orion._task_hint` (the Tasks page: daily/scheduled kinds are work unless the words ask for a reminder), by
+  `Orion._schedule_hit` (chat sentences that are clearly "do X at a time", listing and removing by code) and by the tools
+  `schedule_task` / `task_list` / `task_remove` (every account; `remind_at` is described as "only for what the person does").
+  Before this every scheduled request became a reminder and a guest's daily task fell back to the watch list.
 - **Heartbeat** (`Heartbeat.run_all`): per account. Owner's `brain/HEARTBEAT.md` against everything; a guest's
-  own checklist against only their timers, notifications and last conversation. Alerts to that account only,
+  own checklist against their timers, notifications, scheduled tasks and last conversation. Alerts to that account only,
   deduped 24 h, empty list = no model call. Items come from chat (`watch_add`) or the UI (`watch_add` frame).
+  Live checks (2026-11-18): a checklist line about the weather, a stock or crypto price, a team or the news gets a free
+  live snapshot (`Heartbeat.live_checks`: open-meteo, Yahoo Finance, ESPN, Google News via quickinfo) appended to the
+  context before the judge runs, so "tell me if NVIDIA drops below 180" can actually fire; at most 4 lines per run.
   Code first (2026-11-17): `code_checks` decides what code can (printer paused/failed, routine in error, inbox over
   a count, budget nearly spent) and `fingerprint` hashes the context minus clock noise; the model runs only when the
   fingerprint changed (or a clock-dependent line exists and the hour moved). Log rows carry `mode`: skipped / code / model.
@@ -246,7 +263,12 @@ after task-changing tools and when a timer finishes); the `send.task` hint handl
 `style_*` -> `style`; `files_list`/`file_get` -> `files`/`file` (workspace only, owner); `send.images` saved under
 `files/chat/` and looked at by the local vision model before the turn (`image_look`); `sources` on the final message;
 `email_*` -> `email_alerts` through `orion/mail_alerts.py`, with `/u/{account}/{token}` on the UI port as the one-click
-unsubscribe; `telemetry_7d` and `email_alerts` in the admin snapshot. Guests get `PROFILE.md` (from the UI repo's
+unsubscribe; `telemetry_7d` and `email_alerts` in the admin snapshot. Evening of 2026-11-18: `profile_get` /
+`profile_update {address}` / `profile_forget {text|n}` -> `profile` (`Bridge.profile`: account, title, facts, counts, email
+alerts, cloud status, the owner's note about a guest; `Users.set_address` validates; `_user_changed` refreshes the room and
+the live `Session.user`), `account.features.tasks/profile`, `sync_tasks` per account with "Scheduled" tasks following their
+job, `_relay_one` turning a finished job into the task's `detail`, a `message {background: true, title}` and a banner. The UI
+repo's `js/profile.js`, Tasks page and client were updated by the backend session the same evening. Guests get `PROFILE.md` (from the UI repo's
 GUEST-PROFILES.md) injected into their own turns only (`Brain.profile_text`). `snapshot.opening` / `opening` event
 (owner's request): the chat box's first line is the account's "while you were away" summary (`Bridge.openings`, local
 model, kept current by `_brief_loop` while the person is away) or a code greeting until one exists; the owner's `briefs`
