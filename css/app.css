@@ -705,7 +705,7 @@ body.dash .dock { opacity: 0; pointer-events: none; transform: translateX(-50%) 
 .cloud.want-plus .cloud-ic .r { background: #e7b45a; }
 .cloud.pending .cloud-ic span { animation: pulse 0.9s ease-in-out infinite; }
 /* opening spins the circle half a turn as it hands over to the slider; closing spins it back */
-.cloud:focus-within .cloud-ic { rotate: 180deg; }
+.cloud:focus-within .cloud-ic, .cloud.open .cloud-ic { rotate: 180deg; }
 /* hover-to-open only with a real mouse: on a phone a tap would only fake the hover (and iOS then eats the tap) */
 @media (hover: hover) and (pointer: fine) { .cloud:hover .cloud-ic { rotate: 180deg; } }
 .cloud-sw {
@@ -714,10 +714,10 @@ body.dash .dock { opacity: 0; pointer-events: none; transform: translateX(-50%) 
   max-width: 36px; overflow: hidden; opacity: 0; pointer-events: none;
   transition: max-width 0.5s var(--ease-drawer), opacity 0.3s var(--ease-drawer);
 }
-.cloud:focus-within .cloud-sw { max-width: 170px; opacity: 1; pointer-events: auto; }
+.cloud:focus-within .cloud-sw, .cloud.open .cloud-sw { max-width: 170px; opacity: 1; pointer-events: auto; }
 @media (hover: hover) and (pointer: fine) { .cloud:hover .cloud-sw { max-width: 170px; opacity: 1; pointer-events: auto; } }
 .cloud-dot { transition: opacity 0.5s var(--ease-drawer), scale 0.6s var(--ease-drawer); }
-.cloud:focus-within .cloud-dot { opacity: 0; scale: 0.7; }
+.cloud:focus-within .cloud-dot, .cloud.open .cloud-dot { opacity: 0; scale: 0.7; pointer-events: none; }
 @media (hover: hover) and (pointer: fine) { .cloud:hover .cloud-dot { opacity: 0; scale: 0.7; } }
 /* the thumb slides between the two halves */
 .cloud-thumb {
@@ -2161,3 +2161,24 @@ body:not(.settled) .orbit { transition: none !important; }
 .convo-head .chat-back { display: none; }
 @media (max-width: 899px) { body.chat .convo-head { display: none; } }
 .convo .msg.user { white-space: pre-line; }
+
+/* the status line under the sphere ("O.R.I.O.N. : Standing by") is off screen: it still tells a screen reader what ORION is doing */
+.m-state, body.chat .m-state, body.chat.orb-side .m-state, body.home .m-state {
+  display: block !important; position: fixed !important; width: 1px !important; height: 1px !important; overflow: hidden !important;
+  clip-path: inset(50%) !important; white-space: nowrap !important; opacity: 1 !important; margin: 0 !important; padding: 0 !important; border: 0 !important;
+}
+.m-state::before, body.chat.orb-side .m-state::before { content: none !important; }
+
+/* the connection light: hidden while ORION is connected; a small label only when he isn't */
+.conn {
+  width: auto !important; height: 34px !important; padding: 0 14px 0 12px; display: inline-flex !important; align-items: center; gap: 8px;
+  border-radius: 999px; font-size: 0.8125rem; color: var(--text-2); pointer-events: none;
+  transition: opacity 0.2s var(--ease-out);
+}
+.conn.online { display: none !important; }
+.conn-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); }
+.conn.connecting .conn-dot { animation: lamp 1.2s ease-in-out infinite; background: var(--gold-l); }
+.conn.offline .conn-dot { background: var(--coral); }
+.conn.offline { color: var(--text); }
+@media (prefers-reduced-motion: reduce) { .conn.connecting .conn-dot { animation: none; } }
+@media (max-width: 899px) { .conn { display: none !important; } }

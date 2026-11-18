@@ -142,7 +142,7 @@ function layout() {
       const dockL = 88 + avail / 2 - Math.min(720, avail - 48) / 2;
       const railB = $('.rail').getBoundingClientRect().bottom || topH + 340;
       const dockB = innerHeight - 18;                                 // the chat box's bottom edge
-      const LABEL = 34;                                                // the status line under the sphere
+      const LABEL = 0;                                                 // the status line under the sphere is screen-reader only now
       const size = Math.round(Math.min(190, dockL * 0.62, dockB - railB - 28 - LABEL));
       if (size >= 120 && dockL >= 240) {                               // room for the panel and its full status line
         side = true;
@@ -291,6 +291,7 @@ client.on('connection', ({ status, mode }) => {
   const c = $('#conn');
   c.className = `conn ${status}`;
   c.setAttribute('aria-label', status === 'online' ? `Connected${mode === 'mock' ? ', demo data' : ''}` : status === 'connecting' ? 'Connecting' : 'Offline');
+  $('#conn-t').textContent = status === 'connecting' ? 'Connecting…' : status === 'online' ? '' : 'Offline';
   if (status === 'online') {
     applyAccount();
     renderCloud();
@@ -985,7 +986,13 @@ function renderCloud() {
     b.disabled = locked && on;
   });
 }
+/* a tap on the circle opens it (Safari never focuses a tapped button, so focus alone can't);
+   it folds back a moment after you flip it, or when you tap anywhere else */
+let cloudFold = 0;
+const setCloudOpen = (on) => { clearTimeout(cloudFold); $('#cloud').classList.toggle('open', on); };
+addEventListener('pointerdown', (e) => { if ($('#cloud').classList.contains('open') && !e.target.closest('#cloud')) setCloudOpen(false); }, true);
 $('#cloud').addEventListener('click', (e) => {
+  if (e.target.closest('.cloud-dot')) { setCloudOpen(true); haptic(4); return; }
   if (!e.target.closest('.cloud-sw')) return;
   // a click anywhere on the slider flips it
   const on = !(ui.cloudWant ?? !!client.cloud?.own);
@@ -999,7 +1006,11 @@ $('#cloud').addEventListener('click', (e) => {
     cloudWait = setTimeout(() => { ui.cloudWant = null; renderCloud(); }, 8000);   // no answer: show what ORION last said
     renderCloud();
   }
-  if (e.detail) document.activeElement?.blur();            // pointer clicks: fold back once the pointer leaves (keyboard keeps it open)
+  if (e.detail) {                                          // pointer clicks: fold back shortly (keyboard keeps it open)
+    document.activeElement?.blur();
+    clearTimeout(cloudFold);
+    cloudFold = setTimeout(() => setCloudOpen(false), 1400);
+  }
 });
 client.on('cloud', () => { clearTimeout(cloudWait); ui.cloudWant = null; renderCloud(); });
 
