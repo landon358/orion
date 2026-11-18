@@ -215,7 +215,10 @@ after task-changing tools and when a timer finishes); the `send.task` hint handl
 `files/chat/` and looked at by the local vision model before the turn (`image_look`); `sources` on the final message;
 `email_*` -> `email_alerts` through `orion/mail_alerts.py`, with `/u/{account}/{token}` on the UI port as the one-click
 unsubscribe; `telemetry_7d` and `email_alerts` in the admin snapshot. Guests get `PROFILE.md` (from the UI repo's
-GUEST-PROFILES.md) injected into their own turns only (`Brain.profile_text`).
+GUEST-PROFILES.md) injected into their own turns only (`Brain.profile_text`). `snapshot.opening` / `opening` event
+(owner's request): the chat box's first line is the account's "while you were away" summary (`Bridge.openings`, local
+model, kept current by `_brief_loop` while the person is away) or a code greeting until one exists; the owner's `briefs`
+entry stays the morning brief for the home card and the `brief {}` command.
 
 ## Safety
 
