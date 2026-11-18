@@ -87,8 +87,19 @@ export async function playIntro({ brand, force = false, gate = null } = {}) {
   caps.forEach((c, i) => Object.assign(threads[i].style, { width: `${cw0[i]}px`, height: `${108 * u}px`, top: `${baseY - 104 * u}px` }));
   caps.forEach((c, i) => { c.style.width = `${cw0[i]}px`; c.style.marginRight = `${m0[i]}px`; });
   const vw = innerWidth;
-  const sC = Math.min(1, (vw < 600 ? 0.86 : 0.5) * vw / words.offsetWidth);
+  const sC = Math.min(1, (vw < 600 ? 0.78 : 0.5) * vw / words.offsetWidth);
   words.style.transform = `scale(${sC})`;
+  // centre what you actually see: the sphere's canvas has clear padding round the rings, and the
+  // last letter keeps its logo spacing on the right, so the box centre isn't the visual centre
+  {
+    const wb = words.getBoundingClientRect(), ob = orbHost.getBoundingClientRect();
+    const tb = threads[threads.length - 1].getBoundingClientRect(), t0 = threads[0].getBoundingClientRect();
+    const left = ob.left + ob.width * 0.04, right = tb.right;
+    const top = Math.min(ob.top, t0.top), bottom = Math.max(ob.bottom, t0.bottom);
+    const dx = ((wb.left + wb.right) - (left + right)) / 2 / sC;
+    const dy = ((wb.top + wb.bottom) - (top + bottom)) / 2 / sC;
+    words.style.transform = `scale(${sC}) translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)`;
+  }
   words.style.visibility = 'visible';
 
   /** The rings weave in over `ms`, after `delay`, easing out. A skip finishes them at once. */

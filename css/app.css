@@ -738,7 +738,7 @@ body.dash .dock { opacity: 0; pointer-events: none; transform: translateX(-50%) 
 }
 .send svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .send:active { transform: scale(0.92); }
-.send:disabled { background: rgba(255, 255, 255, 0.07); color: var(--text-3); box-shadow: none; cursor: default; }
+.send:disabled, .send[aria-disabled="true"] { background: rgba(255, 255, 255, 0.07); color: var(--text-3); box-shadow: none; cursor: default; }
 
 .state-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--text-3); box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.05); }
 .state-dot.active { background: var(--gold-l); box-shadow: 0 0 10px rgba(231, 201, 131, 0.8); animation: pulse 1.6s ease-in-out infinite; }
@@ -1903,10 +1903,55 @@ body.chat .feed-inner { max-width: 720px; gap: 34px; }
   /* the envelope sits bare like the bell, not in a circle */
   #btn-email { background: none; border-color: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none; }
 
-  /* ORION page: a smaller sphere, centred in the space between the bar and the composer */
-  body.home .orbit { inset: 0; margin: auto; width: min(196px, 50vw); height: min(196px, 50vw, 84%); }
-  /* conversation: a small ORION over the words; smaller still while typing */
-  body.chat.typing { --map-h: 44px; }
+  /* ORION's sphere has one explicit size per page (--orb), so going from the ORION page to the
+     conversation is one smooth glide: it shrinks and rises into the head of the conversation */
+  body { --orb: 52px; }
+  body.home { --orb: min(196px, 50vw, calc(var(--map-h) * 0.84)); }
+  body.chat { --map-h: 60px; --orb: 50px; }
+  body.chat.typing { --map-h: 44px; --orb: 36px; }
+  body[class] .orbit {
+    inset: auto; margin: 0;
+    left: calc(50% - var(--orb) / 2); top: calc((var(--map-h) - var(--orb)) / 2);
+    width: var(--orb); height: var(--orb);
+    transition: left 0.62s var(--spring), top 0.62s var(--spring), width 0.62s var(--spring), height 0.62s var(--spring), opacity 0.4s;
+  }
+  .stage::after { display: none; }
+
+  /* asked from the ORION page: your words wait in a bubble at the lower right while he thinks */
+  .home-q {
+    position: fixed; z-index: 14; right: 16px; bottom: calc(var(--dock-h) + 14px);
+    max-width: min(78%, 320px); max-height: 7.75em; overflow: hidden;
+    padding: 10px 15px; border-radius: 16px 16px 4px 16px; text-align: left;
+    background: rgba(239, 226, 196, 0.07); border: 1px solid rgba(239, 226, 196, 0.16);
+    font: 400 0.9375rem/1.55 var(--font); color: var(--text);
+    -webkit-line-clamp: 5; display: -webkit-box; -webkit-box-orient: vertical;
+  }
+  .home-q[hidden], body:not(.home) .home-q { display: none; }
+
+  /* the conversation: the back link shares the row with the sphere, the words get the rest */
+  body.chat .convo { top: calc(var(--top-h) + var(--map-h)); bottom: var(--dock-h); transition: opacity 0.25s, top 0.45s var(--spring); }
+  body.chat .convo-head {
+    position: fixed; z-index: 3; top: var(--top-h); left: 6px; right: auto; width: auto;
+    height: var(--map-h); padding: 0; margin: 0; display: flex; align-items: center;
+    transition: height 0.45s var(--spring);
+  }
+  body.chat .convo-head h2 { display: none; }
+  body.chat .convo-head .chat-back { margin: 0; height: 36px; padding: 0 12px 0 8px; font-size: 0.875rem; color: var(--text-2); }
+  body.chat .feed {
+    padding: 14px 20px 18px; overscroll-behavior: contain;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 16px); mask-image: linear-gradient(180deg, transparent 0, #000 16px);
+  }
+  body.chat .feed-inner { gap: 24px; padding-top: 0; }
+  .convo .msg.user { max-width: 82%; border-radius: 16px 16px 4px 16px; padding: 10px 15px; }
+  .convo .msg.user + .msg.leo, .convo .msg.user + .working { margin-top: -6px; }
+  .convo .msg-head { gap: 8px; margin-bottom: 7px; min-width: 0; }
+  .convo .msg-head .tok { display: none; }
+  .convo .msg-head .meta { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; display: block; }
+  .convo .msg-head .meta svg { display: none; }
+  .convo .msg .body { font-size: 1rem; line-height: 1.62; }
+  .convo .working { padding: 2px 0; }
+  body.typing .ask textarea { min-height: 26px; }
+  body.typing .composer { padding-top: 10px; }
 
   /* the menu: an opaque full screen (no blur over a moving sphere) */
   .drawer { background: #0d0c0b; -webkit-backdrop-filter: none; backdrop-filter: none; }
@@ -1941,3 +1986,5 @@ body.chat .feed-inner { max-width: 720px; gap: 34px; }
   body.dash .shader { opacity: 1; }
 }
 @media (min-width: 900px) { .dt-phone, .drawer-sec { display: none; } }
+@media (min-width: 900px) { .home-q { display: none; } }
+body:not(.settled) .orbit { transition: none !important; }

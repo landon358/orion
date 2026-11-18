@@ -126,6 +126,9 @@
     </div>
   </section>
 
+  <!-- Asked from the ORION page: your words wait here while he thinks -->
+  <button type="button" class="home-q" id="home-q" aria-label="Open the conversation" hidden></button>
+
   <!-- The dock: live stats, ask ORION -->
   <section class="dock" id="dock" aria-label="Ask ORION">
     <div class="stats" id="stats" role="list"></div>
@@ -133,12 +136,12 @@
     <div class="composer" id="composer">
       <div class="pics" id="pics" hidden></div>
       <input type="file" id="pic-in" accept="image/*" multiple hidden>
-      <form class="ask" id="compose-form" autocomplete="off">
+      <div class="ask" id="compose-form">
         <label class="ask-field">
           <span class="sr-only">Message ORION</span>
-          <textarea id="input" rows="2" placeholder="Ask ORION" enterkeyhint="send"></textarea>
+          <textarea id="input" rows="2" placeholder="Ask ORION" enterkeyhint="send" inputmode="text" autocomplete="off" autocorrect="on" autocapitalize="sentences" spellcheck="true" data-form-type="other" data-lpignore="true" data-1p-ignore></textarea>
         </label>
-      </form>
+      </div>
 
       <div class="voice-bar" id="voice-bar" hidden>
         <canvas class="wave" id="wave" aria-hidden="true"></canvas>
@@ -167,7 +170,7 @@
         <button type="button" class="round-btn end" id="btn-voice-end" aria-label="End voice" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>
         </button>
-        <button type="submit" form="compose-form" class="send" id="btn-send" aria-label="Send" disabled>
+        <button type="button" class="send" id="btn-send" aria-label="Send" aria-disabled="true">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
         </button>
       </div>

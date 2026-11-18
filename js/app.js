@@ -610,12 +610,44 @@ function addUserMessage(m) {
   const from = ui.flyFrom;
   ui.flyFrom = null;
   feed.scrollTop = feed.scrollHeight;
-  if (from && !reduced.matches) fly(el, from);
+  if (from && !reduced.matches && ui.route === 'chat') fly(el, from);
 }
+
+/* Asked from the ORION page: your words rise out of the composer into a bubble on the right while
+ * he thinks; when his answer opens the conversation, that bubble glides to its place in it. */
+const homeQ = $('#home-q');
+function showHomeQ(text) {
+  homeQ.textContent = text;
+  homeQ.hidden = false;
+  homeQ.getAnimations().forEach((a) => a.cancel());
+  if (reduced.matches) return;
+  const to = homeQ.getBoundingClientRect(), r = input.getBoundingClientRect();
+  const dy = Math.max(26, r.top - to.top);
+  homeQ.animate([
+    { opacity: 0, transform: `translateY(${dy}px) scale(0.96)`, offset: 0 },
+    { opacity: 1, offset: 0.35 },
+    { opacity: 1, transform: 'none' },
+  ], { duration: 620, easing: 'cubic-bezier(.2,.9,.25,1)' });
+}
+/** Where the bubble's words start, read while it's still showing (before the page changes). */
+function homeQSpot() {
+  if (homeQ.hidden || !homeQ.offsetWidth) return null;
+  const r = homeQ.getBoundingClientRect(), cs = getComputedStyle(homeQ);
+  return { left: r.left + parseFloat(cs.paddingLeft), top: r.top + parseFloat(cs.paddingTop) };
+}
+function handOffHomeQ(toChat, from) {
+  if (homeQ.hidden) return;
+  if (!from) { homeQ.hidden = true; return; }
+  const mine = [...feedInner.querySelectorAll('.msg.user')].pop();
+  if (toChat && mine && !reduced.matches) {
+    fly(mine, from, true); homeQ.hidden = true;
+  } else homeQ.hidden = true;
+}
+homeQ.addEventListener('click', () => go('chat'));
 
 /* The words you typed lift out of the composer and settle as your bubble. */
 const FLY_PROPS = ['font-size', 'font-weight', 'line-height', 'letter-spacing', 'color', 'padding', 'border-radius', 'background-color', 'border', 'box-shadow', 'backdrop-filter'];
-function fly(el, from) {
+function fly(el, from, solid = false) {
   el.style.animation = 'none';
   const to = el.getBoundingClientRect();
   if (!to.width) return;
@@ -628,12 +660,21 @@ function fly(el, from) {
   el.style.visibility = 'hidden';
   const dx = from.left - (to.left + parseFloat(cs.paddingLeft));
   const dy = from.top - (to.top + parseFloat(cs.paddingTop));
-  const a = c.animate([
+  const a = c.animate(solid ? [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }] : [
     { transform: `translate(${dx}px, ${dy}px)`, backgroundColor: 'rgba(0,0,0,0)', borderColor: 'rgba(0,0,0,0)', boxShadow: 'none', offset: 0 },
     { backgroundColor: 'rgba(0,0,0,0)', offset: 0.25 },
     { transform: 'none', offset: 1 },
-  ], { duration: 720, easing: 'cubic-bezier(.2,.9,.25,1)' });
-  const done = () => { el.style.visibility = ''; c.remove(); };
+  ], { duration: solid ? 640 : 720, easing: 'cubic-bezier(.2,.9,.25,1)' });
+  // the conversation may scroll while the words are in the air: keep the landing spot on them
+  let live = true;
+  const follow = () => {
+    if (!live) return;
+    const now = el.getBoundingClientRect();
+    c.style.left = `${now.left}px`; c.style.top = `${now.top}px`;
+    requestAnimationFrame(follow);
+  };
+  requestAnimationFrame(follow);
+  const done = () => { live = false; el.style.visibility = ''; c.remove(); };
   a.onfinish = done; a.oncancel = done;
 }
 
@@ -975,19 +1016,36 @@ const form = $('#compose-form');
 function autosize() {
   input.style.height = 'auto';
   input.style.height = `${Math.min(input.scrollHeight, 132)}px`;
-  $('#btn-send').disabled = !input.value.trim();
+  $('#btn-send').setAttribute('aria-disabled', String(!input.value.trim() && !ui.pics?.length));
 }
 input.addEventListener('input', autosize);
 input.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); form.requestSubmit(); }
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submitCompose(); }
 });
-input.addEventListener('focus', () => { $('#composer').classList.add('focus'); if (!isWide()) body.classList.add('typing'); });
-input.addEventListener('blur', () => { $('#composer').classList.remove('focus'); body.classList.remove('typing'); });
-form.addEventListener('submit', (e) => {
-  e.preventDefault();
+// on a phone the box drops to one line while the keyboard is up, so the conversation keeps the room
+input.addEventListener('focus', () => { $('#composer').classList.add('focus'); if (!isWide()) { body.classList.add('typing'); input.rows = 1; autosize(); } });
+input.addEventListener('blur', () => { $('#composer').classList.remove('focus'); body.classList.remove('typing'); if (input.rows !== 2) { input.rows = 2; autosize(); } });
+// The send button is a plain button, not a form submit: a <form> round the box makes iOS show its
+// passwords / cards / location bar over the keyboard. Pressing a dock button doesn't take focus
+// from the box either, so the keyboard stays put and nothing moves under the finger mid-tap.
+const sendBtn = $('#btn-send');
+$('#composer').addEventListener('mousedown', (e) => {
+  if (document.activeElement === input && e.target.closest('.dock-row button')) e.preventDefault();
+});
+let sentAt = 0;
+sendBtn.addEventListener('touchend', (e) => {
+  const t = e.changedTouches[0], r = sendBtn.getBoundingClientRect();
+  if (!t || t.clientX < r.left - 12 || t.clientX > r.right + 12 || t.clientY < r.top - 12 || t.clientY > r.bottom + 12) return;
+  e.preventDefault();                       // no delayed click, no blur
+  submitCompose();
+}, { passive: false });
+sendBtn.addEventListener('click', () => submitCompose());
+function submitCompose() {
+  if (performance.now() - sentAt < 400) return;
   const text = input.value.trim();
   if (!text && !ui.pics.length) return;
   if (ui.picsBusy) return;
+  sentAt = performance.now();
   const r = input.getBoundingClientRect(), cs = getComputedStyle(input);
   ui.flyFrom = { left: r.left + parseFloat(cs.paddingLeft), top: r.top + parseFloat(cs.paddingTop) };
   input.value = '';
@@ -995,11 +1053,13 @@ form.addEventListener('submit', (e) => {
   const images = ui.pics;
   ui.pics = [];
   renderPics();
+  // from the ORION page the keyboard goes down so you can watch him think; in the conversation it stays
+  if (ui.route === 'home' && !isWide()) input.blur();
   sendText(text, images);
-});
+}
 function sendText(text, images = []) {
   // from the ORION page you stay with him while he thinks; the conversation opens with his answer
-  if (ui.route === 'home') ui.holdHome = true;
+  if (ui.route === 'home') { ui.holdHome = true; showHomeQ(text || (images.length > 1 ? `${images.length} pictures` : 'A picture')); }
   else if (ui.route !== 'chat') go('chat');
   client.send(text, images.length ? { images } : undefined);
 }
@@ -1034,6 +1094,7 @@ function renderPics(loading = 0) {
   box.innerHTML = ui.pics.map((p, i) => `<span class="pic"><img src="${p.url}" alt="${esc(p.name)}"><button type="button" data-pic-x="${i}" aria-label="Remove ${esc(p.name)}">${X_SVG}</button></span>`).join('')
     + Array.from({ length: loading }, () => '<span class="pic loading" aria-label="Preparing picture"></span>').join('');
   $('#btn-plus').disabled = ui.pics.length >= PIC_MAX;
+  $('#btn-send').setAttribute('aria-disabled', String(!input.value.trim() && !ui.pics.length));
 }
 $('#pics').addEventListener('click', (e) => {
   const x = e.target.closest('[data-pic-x]');
@@ -1668,6 +1729,7 @@ function applyRoute() {
   let r = ROUTES[location.hash] ?? 'home';
   if ((r === 'business' && !canAct()) || (r === 'admin' && !canAdmin())) { history.replaceState(null, '', HASH.home); r = 'home'; }
   const prev = ui.route;
+  const qFrom = homeQSpot();
   ui.route = r;
   ['home', 'chat', 'business', 'admin'].forEach((k) => body.classList.toggle(k, k === r));
   body.classList.toggle('dash', DASH.has(r));
@@ -1690,6 +1752,7 @@ function applyRoute() {
   if (ui.drawerOpen && !isWide()) closeDrawer();
   document.title = r === 'business' ? 'Ciel · ORION' : r === 'admin' ? 'Admin · ORION' : r === 'chat' ? 'Conversation · ORION' : 'ORION';
   layout();
+  if (r !== 'home') handOffHomeQ(r === 'chat', qFrom);
   if (prev != null) haptic(5);
 }
 addEventListener('hashchange', applyRoute);
@@ -1821,6 +1884,8 @@ $('#summary').addEventListener('click', (e) => {
 
 autosize();
 applyRoute();
+// the sphere takes its first place without gliding there; from then on page changes glide it
+setTimeout(() => body.classList.add('settled'), 120);
 client.connect();
 setInterval(() => {
   if (tasksOpen()) renderTasks();
