@@ -74,7 +74,10 @@ Both the chat ("let me know if…") and the panel edit the same list. Limit is 2
 | ← UI | `brief {text, at, fresh}` | show as the "while you were gone" card on the home page |
 
 The owner's brief is the morning brief (also sent as a `brief` event when the 07:30 routine runs). The
-`brief` command for the owner generates one only if today's does not exist yet (one Haiku call, about a cent).
+`brief` command for the owner returns today's report when it exists; otherwise (since 2026-11-18) the free local
+"while you were away" summary comes back instead. The command never makes a morning brief itself, because the UI
+sends `brief` on its own a few seconds after every connect and that must not cost a Haiku call; only the 07:30
+routine (or running that routine from the HTTP API) writes the report.
 
 ## 5b. Local / Local+ (the Claude switch)
 
