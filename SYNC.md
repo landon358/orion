@@ -126,6 +126,9 @@ This file is the hand-off list between them. Each item names its owner. Update i
   (saved names); `style` items carry `n` and a change reply carries `result`; `email_alerts` has `pending: true` while a
   code is out; the final `message` has `sources` only when pages were read; `admin_snapshot.telemetry_7d` and
   `admin_snapshot.email_alerts` exist. Shapes in ORION-PROTOCOL.md "Backend notes".
+- **UI to build (Landon's request, 2026-11-18): the conversation tab opens with `snapshot.opening.text` as Orion's
+  first line instead of the fixed "Evening, Commander" greeting, and replaces it when an `opening` event arrives.**
+  Shape and rules in ORION-PROTOCOL.md "Backend additions: opening". Backend done and live.
 - Owner decisions still open from GUEST-PROFILES.md: Kyle's niche-market morning report (needs a guest routine or a
   line in his brief, plus research spend) and Blake's career notes (the people-card tools can hold them). The backend
   can add a per-guest brief line once Landon says yes.
