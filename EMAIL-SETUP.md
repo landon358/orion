@@ -1,7 +1,8 @@
 # EMAIL-SETUP.md: ORION's email through Resend
 
 ORION sends email alerts from your own domain (the one that will serve the web app) through Resend.
-The plan for the backend is in SYNC.md under "Email alerts". **No secrets go in this file or in the repo.**
+The backend side is built (`orion/mail_alerts.py` on the PC; plan and status in SYNC.md under "Email alerts").
+**No secrets go in this file or in the repo.**
 
 ## 1. Make a Resend account (5 minutes)
 
@@ -28,47 +29,49 @@ Until the domain is verified, Resend only delivers to your own Resend email, so 
 3. Resend shows the key **once** (it starts with `re_`). Keep the page open for step 4. Don't paste it into chat,
    a file or the repo.
 
-## 4. Store the key on the PC
+## 4. Store the key and the sender on the PC (one command)
 
-On the Windows PC that runs ORION, store it in Windows Credential Manager under the name the backend reads:
-
-- Target: `Orion-assistant`
-- User: `email:resend_api_key`
-- Password: the API key
-
-**Easiest way, once the backend adds it:** `python orion_connect.py email`. It asks for the key with hidden typing,
-saves it and sends you a test email.
-
-**By hand, until then:** in PowerShell, from the ORION folder:
+On the Windows PC that runs ORION, in the ORION folder:
 
 ```powershell
-python -c "import keyring, getpass; keyring.set_password('Orion-assistant', 'email:resend_api_key', getpass.getpass('Resend key: '))"
+.\.venv\Scripts\python.exe orion_connect.py email-alerts
 ```
 
-## 5. Tell ORION the address
+It asks for the provider (`resend`), the sending address (`orion@alerts.yourdomain.com`), a reply-to address (your own)
+and the API key with hidden typing. It stores the key in Windows Credential Manager as `Orion-assistant /
+email_alerts:resend_api_key`, writes the sender into `config.json -> email_alerts` and offers to send a test email.
+(`orion_connect.py email`, without `-alerts`, is a different thing: the owner's Gmail reading connector.)
 
-Put the sender (not the key) in ORION's `config.json`:
+What lands in `config.json` (no secrets):
 
 ```json
-"email": {
+"email_alerts": {
   "provider": "resend",
-  "from": "ORION <orion@alerts.yourdomain.com>",
+  "from_address": "orion@alerts.yourdomain.com",
+  "display_name": "ORION",
   "reply_to": "your own email",
-  "site": "https://yourdomain.com"
+  "per_account_per_day": 3, "per_day": 10, "quiet_hours": [22, 7], "bundle_s": 600, "only_when_away_s": 120
 }
 ```
 
-## 6. Test it
+The "Open ORION" link in each email is `server.ui_url` from the same file (`orion_connect.py ui-url <url>` sets it).
 
-1. Restart ORION.
+## 5. Test it
+
+1. Restart ORION (`stop-orion.ps1`, then `start-orion.ps1`).
 2. In the web UI, open the envelope in the top bar, enter your own email and confirm the 6-digit code.
 3. The code email should arrive from "ORION". If it lands in spam, mark it **Not spam** once. Resend's
    **Emails** page shows every send and whether it was delivered.
+4. From the PC, `orion_connect.py test email-alerts you@example.com` sends a plain test at any time.
 
 ## Good to know
 
 - **Limits:** the free plan is 100 a day. ORION's own caps (3 per account a day, 10 in total, quiet from 22:00
-  to 07:00) stay far below that.
+  to 07:00, held and sent at 07:00) stay far below that.
 - **If the key leaks:** delete it in Resend's API Keys page, make a new one (step 3) and store it again (step 4).
 - **Replies:** replies go to the `reply_to` address (yours). ORION doesn't read incoming mail.
+- **Unsubscribe:** every email carries a one-click unsubscribe link to the PC's Funnel address
+  (`/u/<account>/<token>`); it can only turn that account's alerts off.
+- **Gmail instead:** `email-alerts` also accepts `gmail` as the provider (a Gmail account made for ORION with an App
+  Password, sent over SMTP). Resend is the default.
 - **Cost later:** if alerts ever outgrow the free plan, Resend's paid plan starts at about $20 a month for 50,000.
