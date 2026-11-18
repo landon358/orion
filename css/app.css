@@ -1013,7 +1013,7 @@ body.dash .bg::after { opacity: 1; }
   --hair-2: rgba(255, 255, 255, 0.07);
   --cu: #e9b57c;
 }
-body.business #biz, body.admin #adm { opacity: 1; visibility: visible; transform: none; transition: opacity 0.4s 0.1s, transform 0.6s 0.1s var(--spring), visibility 0s; }
+body.business #biz, body.admin #adm, body.profile #prof { opacity: 1; visibility: visible; transform: none; transition: opacity 0.4s 0.1s, transform 0.6s 0.1s var(--spring), visibility 0s; }
 .biz-in { max-width: 1320px; margin: 0 auto; }
 
 /* page head: a large light title, a muted line, KPIs to the right */
@@ -1143,6 +1143,39 @@ body.business #biz, body.admin #adm { opacity: 1; visibility: visible; transform
 .status::before { content: ""; width: 2px; height: 11px; background: var(--text-3); }
 .status.ok::before { background: var(--cu); } .status.warn::before { background: var(--amber); } .status.bad::before { background: var(--coral); }
 .biz-foot { margin-top: 48px; padding-top: 12px; border-top: 1px solid var(--hair-2); font-size: 0.6875rem; color: var(--text-3); }
+
+/* ---------- profile (2026-11-18): the person's own page ---------- */
+.prof-grid { grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.4fr); }
+.prof-line { margin: 0 0 12px; font-size: 0.9375rem; line-height: 1.5; color: var(--text-2); }
+.prof-line b { color: var(--text); font-weight: 500; }
+.prof-line.mute { color: var(--text-3); }
+.prof-facts { list-style: none; margin: 0; padding: 0; }
+.prof-facts li { display: flex; align-items: flex-start; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--hair-2); transition: opacity 0.25s; }
+.prof-facts li.going { opacity: 0.35; }
+.prof-facts li > span { flex: 1; min-width: 0; font-size: 0.9375rem; line-height: 1.45; color: var(--text); }
+.prof-facts li small { display: block; margin-top: 3px; font: 400 0.6875rem var(--mono); color: var(--text-3); }
+.prof-x { flex: none; width: 32px; height: 32px; margin-top: -4px; display: grid; place-items: center; border-radius: 999px; color: var(--text-3); opacity: 0.6; transition: opacity 0.2s, background 0.2s, color 0.2s; }
+.prof-x svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.prof-x:hover, .prof-x:focus-visible { opacity: 1; color: var(--coral); background: rgba(224, 128, 111, 0.1); }
+.prof-x:disabled { opacity: 0.25; pointer-events: none; }
+.prof-more { margin-top: 14px; }
+.prof-about p { margin: 0 0 10px; font-size: 0.875rem; line-height: 1.55; color: var(--text-2); }
+.derr.ok { color: var(--text-2); }
+@media (max-width: 1180px) { .prof-grid { grid-template-columns: 1fr; gap: 44px; } }
+
+/* a result ORION brings on his own (scheduled task, background job) gets a small label above the message */
+.bg-kicker { display: inline-flex; align-items: center; gap: 7px; margin-bottom: 6px; padding: 3px 10px 3px 7px; border-radius: 999px; background: rgba(233, 181, 124, 0.1); font: 400 0.6875rem/1.4 var(--mono); letter-spacing: 0.02em; color: var(--amber, #e9b57c); max-width: 100%; }
+.bg-kicker svg { width: 13px; height: 13px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.bg-kicker span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* scheduled tasks on the Tasks page: work ORION does, with its status and result */
+.tk-item.tk-sched, .tk-item.has-detail { align-items: flex-start; }
+.tk-item.tk-sched .tk-time, .tk-item.has-detail .tk-time { padding-top: 2px; }
+.tk-item[data-st="running"] .tk-time { color: var(--amber); animation: tk-pulse 1.6s ease-in-out infinite; }
+.tk-item[data-st="done"] .tk-t { color: var(--text-2); }
+.tk-item[data-st="done"] .tk-time { color: var(--text-3); }
+.tk-item[data-st="rejected"] .tk-time { color: var(--coral, #ec6f5e); }
+.tk-item.open .bg-detail { -webkit-line-clamp: unset; display: block; color: var(--text); }
 
 /* ---------- admin ---------- */
 .adm-wait { color: var(--text-3); font-size: 0.875rem; }
@@ -1307,7 +1340,7 @@ body.business #biz, body.admin #adm { opacity: 1; visibility: visible; transform
   body.chat .convo { left: 0; right: 0; top: calc(var(--top-h) + var(--map-h)); bottom: var(--dock-h); }
   body.chat .convo-head { display: flex; padding: 6px 10px 0; }
   body.chat .convo { top: calc(var(--top-h) + var(--map-h) - 6px); }
-  .drawer-pages { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 2px 16px 12px; }
+  .drawer-pages { display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); gap: 6px; margin: 2px 16px 12px; }
   .drawer-pages a {
     display: grid; place-items: center; height: 40px; border-radius: 14px; text-decoration: none;
     font-size: 0.875rem; font-weight: 500; color: var(--text-2); background: var(--fill-2); border: 1px solid var(--edge);
