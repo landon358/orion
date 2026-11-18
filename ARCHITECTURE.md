@@ -193,6 +193,10 @@ the reason is reported. Surfaces: UI frames `cloud` / `cloud_master`, HTTP `/clo
   was done or does not ask yes/no, code replaces it with "Not done yet, Commander. Waiting for your OK to ... Say yes to
   proceed or no to cancel." (This fixed the sonnet email of 2026-11-17 that Orion said it had sent: "yes send it" was
   not a strict yes, the pending send expired as a new request, and the 9B then wrote "sent" for a NOT DONE YET result.)
+  A yes or no that arrives after the offer has expired (`safety.confirm_timeout_s`, 2 minutes; audited as `expired`) is
+  also answered by code: "Nothing was waiting for your OK, Commander. The request expired after 2 minutes, so nothing
+  was done. Ask again if you still want it." (Found 2026-11-18 when the 9B answered such a yes with "I have forgotten
+  that fact" while the fact was still there.)
 - **Phone push** (`orion/push.py`, added 2026-11-17): the owner's bus events (reminders and other notifications,
   heartbeat alerts, routine results, the brief) and approvals are mirrored to a phone through ntfy (free app, a topic
   name) or Twilio SMS. `Bridge.seconds_since_owner_frame` tells it whether an owner device is active; if one sent a
