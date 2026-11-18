@@ -132,6 +132,7 @@ export class RealLeoClient extends Emitter {
   files = null;                       // {items: [{path, name, size, modified, kind}]}: what ORION made (owner)
   style = null;                       // {items: [{id, text}]}: this account's standing rules
   email = null;                       // {email, verified, on}: email alerts for this account (proposed)
+  profile = null;                     // {account, name, address, facts, counts, email_alerts, cloud, about, result?}: the Profile page
   cloud = null;                       // Local / Local+: {mode, on, own, master, configured, allowance_left_usd, budget_remaining_usd, reason}
   admin = null;                       // the owner's master view (ACCOUNTS.md §6): the last admin_snapshot, kept current
   #adminWanted = false;               // re-asked for after a reconnect
@@ -231,6 +232,7 @@ export class RealLeoClient extends Emitter {
         this.cloud = data.cloud ?? null;
         if (this.#adminWanted) this.#raw({ type: 'admin', data: { on: true } });
         this.styleList();
+        this.profileGet();
         if (this.account?.features?.actions !== false) this.filesList();
         save({ url: this.#url, ...this.#creds });   // the next visit logs in silently
         this.#settle();
@@ -270,6 +272,14 @@ export class RealLeoClient extends Emitter {
       case 'file': return this.emit('file', data);
       case 'style': this.style = data; return this.emit('style', data);
       case 'email_alerts': this.email = data; return this.emit('email_alerts', data);
+      case 'profile': {
+        // the Profile page's data; it also carries the account (the title may have changed)
+        this.profile = data;
+        if (data.account) { this.account = data.account; this.emit('account', data.account); }
+        if (data.email_alerts) this.email = data.email_alerts;
+        return this.emit('profile', data);
+      }
+      case 'account': this.account = data; return this.emit('account', data);
       case 'cloud': this.cloud = data; return this.emit('cloud', data);
       case 'route': return this.emit('route', data);
       case 'admin_snapshot': this.admin = data; return this.emit('admin_snapshot', data);
@@ -314,6 +324,20 @@ export class RealLeoClient extends Emitter {
   emailVerify(code) { this.#cmd('email_verify', { code }); }
   emailOn(on) { this.#cmd('email_on', { on: !!on }); }
   emailRemove() { this.#cmd('email_remove', {}); }
+  /** Profile (2026-11-18): what ORION has on this person, their title; every answer is a `profile` frame. */
+  profileGet() { this.#raw({ type: 'profile_get', data: {} }); }
+  profileUpdate(d) { this.#cmd('profile_update', d); }
+  profileForget(fact) { this.#cmd('profile_forget', typeof fact === 'number' ? { n: fact } : { text: fact }); }
+  /** Sign out of this device: forget the saved login, close the socket, show the login screen. ORION keeps nothing per device. */
+  signOut() {
+    this.#creds = {};
+    save({ url: this.#url });
+    clearTimeout(this.#timer);
+    const ws = this.#ws; this.#ws = null;
+    try { ws?.close(); } catch {}
+    this.account = null; this.profile = null; this.admin = null; this.#adminWanted = false;
+    this.emit('connection', { status: 'offline', mode: this.mode, reason: 'auth' });
+  }
   approve(id) { this.#cmd('approve', { id }); }
   reject(id) { this.#cmd('reject', { id }); }
   setListening(on) { this.#raw({ type: 'listening', data: { on } }); }
