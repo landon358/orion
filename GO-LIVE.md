@@ -5,6 +5,12 @@ password once, and talks to Orion. No app installs, no tokens in links. Stranger
 address see the lock screen and nothing else, because the page itself contains nothing private and
 Orion's server refuses every connection that does not present the password or a token.
 
+**Done 2026-11-18.** The site is live at https://orion.us.org (Netlify, custom domain, certificate issued),
+the login screen and default server are in, and the backend allows the new origin (`ui_url` set, origin
+check verified from outside: the new origin and GitHub Pages pass, a stranger origin gets 403). The rest
+of this file is kept as the record of the steps, with the example address `orion-ui.netlify.app`
+standing for `orion.us.org`.
+
 The backend side of this is done and live (see CLAUDE.md). This file is the checklist for the UI
 polish and the Netlify move, in order.
 
