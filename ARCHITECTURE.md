@@ -20,7 +20,7 @@ and pushes doc copies to the repo with the GitHub Contents API.
 | The ORION UI wire protocol, base version | UI repo `ORION-PROTOCOL.md` (github.com/landon358/orion) |
 | Accounts, watch lists, briefs, Local/Local+, the owner's master view, over the socket | UI repo `ACCOUNTS.md` |
 | What UI edits must not break, and how to test against the real backend | UI repo `CLAUDE.md` |
-| Moving the UI to Netlify with a login screen | UI repo `GO-LIVE.md` |
+| How the UI went live at https://orion.us.org (Netlify, login screen; done 2026-11-18) | UI repo `GO-LIVE.md` |
 | What the backend added for the new UI and what the UI still has to build | UI repo `SYNC.md` |
 | The running log of the capabilities plan: done, open, needs the owner | `OVERNIGHT.md` (backend only) |
 | Copies of the UI-repo files | `ui-repo/` here |
