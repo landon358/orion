@@ -18,7 +18,7 @@
 
 This is the brief for whoever builds ORION's server (the agent on the RTX 2070 machine). The web UI is finished and already speaks this protocol. Your job is to expose **one WebSocket endpoint** that sends the events below and accepts the commands below. Nothing in the UI needs to change.
 
-- **UI, live:** https://landon358.github.io/orion/
+- **UI, live:** https://orion.us.org (Netlify, since 2026-11-18); https://landon358.github.io/orion/ still serves the same files
 - **UI code:** https://github.com/landon358/orion. The client is `RealLeoClient` in `js/leo-client.js`.
 - **Working reference server:** `tools/orion-server-example.mjs`. It has no dependencies and fakes the agent with canned replies; read it alongside this doc.
 
