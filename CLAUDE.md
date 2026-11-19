@@ -1,6 +1,7 @@
 # CLAUDE.md: read this before changing anything in this repo
 
-This repo is **only the ORION UI** (static site, GitHub Pages at https://landon358.github.io/orion/).
+This repo is **only the ORION UI** (static site, live at https://orion.us.org on Netlify since 2026-11-18,
+with GitHub Pages at https://landon358.github.io/orion/ still serving the same files).
 The backend already exists, is live, and speaks `ORION-PROTOCOL.md` exactly. Your job when editing
 here is to improve the UI **without changing the wire contract**. If a UI change needs the backend
 to change, see "Changing the protocol" below. Do not guess what the backend does; it is written down here.
@@ -44,9 +45,11 @@ to change, see "Changing the protocol" below. Do not guess what the backend does
   CIEL, friends, tools, preferences, owner-only), `brain/STYLE.md` per account (standing reply rules),
   `HEARTBEAT.md` per account (the watch list), facts, journals, reports, workflows, notes, proposals.
   The HTTP API reads and edits them (`GET/PUT /memory/file`); the socket covers watch lists and briefs.
-- **Hosting**: GitHub Pages today; moving to Netlify with the login screen (GO-LIVE.md). The default server
-  in `js/config.js` should be the PC's Funnel address; `orion_connect.py ui-url <netlify url>` on the PC
-  adds the new origin.
+- **Hosting**: Netlify at https://orion.us.org (custom domain, Let's Encrypt, `netlify.toml` publishes the repo
+  root with no build step) since 2026-11-18, and GitHub Pages at the old address; every push to `main`
+  redeploys both. The default server in `js/config.js` is the PC's Funnel address. The backend's
+  `server.ui_url` is the Netlify address (email links use it); both origins are allowed. If the address
+  ever changes again: `orion_connect.py ui-url <url>` on the PC, then restart Orion.
 - **Voice**: phase 1 (browser speaks). Kokoro (EN/FR) exists on the PC but server audio over the socket is
   not designed.
 
@@ -59,7 +62,7 @@ or anything that reads these frames:
 |---|---|
 | First frame must be `hello` within 5 s, else close **4401**: `{name, password, client, protocol}` (any account) or `{token, …}` (owner token, guest token, or the owner's password alone). Bad login: 4401; after 5 failures from one address, 4401 for 10 minutes. Bad `Origin`: HTTP 403 before the upgrade. | Send `hello` first; stop retrying on 4401 and show the login screen; keep the `?server=&token=` bootstrap and the `orion-server` localStorage key. See GO-LIVE.md (login screen, default server) and **ACCOUNTS.md** (accounts, watch list, brief, admin view). |
 | `snapshot` also carries `account` (`id, name, role, address, allowance_left_usd, features`), `watch`, `cloud` (Local / Local+ status) and sometimes `brief`. Extra commands: `watch_add/remove/list`, `brief`, `cloud {on}`, and owner-only `cloud_master {on}`, `admin`, `account_add/update/remove/list`. Extra events: `watch`, `brief`, `cloud`, `accounts`, `admin_snapshot`, `admin_event`. | Build the UI from `account.features`; guests get four bands and never `metrics`. Full shapes in ACCOUNTS.md. |
-| Allowed origins are a backend setting (`config.json` -> `server.ui_origins`): `https://landon358.github.io` and `http://localhost:8840`. | If the site moves (Netlify, custom domain), the new origin has to be added on the PC; nothing in the UI can fix a 403. |
+| Allowed origins are a backend setting (`config.json` -> `server.ui_origins`): `https://orion.us.org`, `https://landon358.github.io` and `http://localhost:8840`. Netlify deploy-preview addresses are not allowed. | If the site moves again, the new origin has to be added on the PC; nothing in the UI can fix a 403. |
 | `snapshot` after hello: `{protocol: 1, speaks: false, state, tools, tasks, approvals, activity, vitals}`. `metrics` is **omitted until Shopify is connected**; from then on the owner's snapshot carries it and `metrics` frames follow on change (60 `days`, `recentOrders`, `products`, Clarity `sessions`/funnel accumulated per day from the day of connection, `spend`/`campaigns` 0/empty until Meta Ads, `kpis.rating`/`reviews` 0/0 because there is no source). Never a `sample` field. | Keep the "sample data" note logic for a missing `metrics`; never expect `metrics` to be present. Hide the rating fragment when `kpis.reviews` is 0. |
 | `tools` are 11 bands for the owner, innermost first: `memory, planner, web, files, voice, email, shopify, meta, clarity, github, printer` (+`calls`, `lastUsed`); a guest gets `memory, planner, web, voice`. All eleven have icons in the UI (`js/app.js` ICON, names and groups in `js/tools.js`); an unknown id gets the generic icon. The `files` band ("Machine") now also covers Orion's file tools: reading documents, spreadsheets, PDFs and images, creating text files and spreadsheets in its `files/` workspace, exporting the chat. The HTTP API (not the socket) serves those files: `GET /files`, `GET /files/download?path=` with the owner token. | Do not hard-code the tool list; render whatever `tools` ORION sends. A "files Orion made" panel would use the HTTP endpoints; a socket frame for it would be a protocol proposal. |
 | Reply streaming: `message` `{id, role: "leo", text: <full text so far>, streaming: true}` repeatedly, then one frame with `streaming: false` (and `interrupted: true` after an `interrupt`, text ending in " —"). The text can **shrink to ""** mid-stream under the same id: that is Orion withdrawing a local reply and handing the turn to the cloud brain (a `state thinking` with detail "Claude Haiku" follows, then the new text streams). Replies carry no markdown (the backend strips bold, italics, headings and star bullets; lists come as "1." or "- " lines). | Full-text-so-far semantics, one id per reply, `role: "leo"` (the role name stays "leo" for compatibility; renaming it needs a backend change). Always render the latest `text` as a whole, never append deltas yourself; do not rely on markdown rendering. |
